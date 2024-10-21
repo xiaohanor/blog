@@ -9,7 +9,7 @@ import {
   Mastodon,
   Threads,
   Instagram,
-  Bilibili, 
+  Bilibili,
 } from './icons'
 
 const components = {
