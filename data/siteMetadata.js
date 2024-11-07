@@ -17,6 +17,7 @@ const siteMetadata = {
   youtube: 'https://youtube.com',
   linkedin: 'https://www.linkedin.com',
   bilibili: 'https://space.bilibili.com/351233837',
+  rss: '/feed.xml',
   locale: 'zh-CN',
   // set to true if you want a navbar fixed to the top
   stickyNav: false,
