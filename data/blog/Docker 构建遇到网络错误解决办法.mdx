@@ -1,0 +1,27 @@
+---
+title: Docker 构建遇到网络错误解决办法
+date: 2024-11-11
+tags: ['follow','RSS']
+draft: false
+summary: 解决 docker compose build 时出现的网络错误
+---
+# 问题
+
+在 docker compose build 时出现报错：` => ERROR [app internal] load metadata for docker.io/library/debian:bookworm-slim  `
+
+```powershell
+failed to solve: debian:bookworm-slim: failed to resolve source metadata for docker.io/library/debian:bookworm-slim: failed to authorize: failed to fetch oauth token: Post "https://auth.docker.io/token": dial tcp 128.242.240.189:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
+```
+
+即使开启了如 Clash 之类的科学上网软件也没用？ 来尝试正确的解决方法吧！
+# 解决方法
+
+（只是开始科学上网软件并不会让命令行工具的网络数据自动通过代理，需要在命令行的环境中手动设置代理）
+
+以 PowerShell 为例， 输入以下命令:
+```powershell
+$env:HTTP_PROXY = "http://127.0.0.1:7989" //端口号根据使用的软件会有所不同
+$env:HTTPS_PROXY = "http://127.0.0.1:7989" //端口号根据使用的软件会有所不同
+```
+- 此设置仅在当前 PowerShell 会话中有效，关闭会话后失效。
+
