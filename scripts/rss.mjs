@@ -31,6 +31,7 @@ const generateRss = (config, posts, page = 'feed.xml') => `
       <lastBuildDate>${new Date(posts[0].date).toUTCString()}</lastBuildDate>
       <atom:link href="${config.siteUrl}/${page}" rel="self" type="application/rss+xml"/>
       ${posts.map((post) => generateRssItem(config, post)).join('')}
+      ${post.body?.raw ? `<content:encoded><![CDATA[${post.body.raw}]]></content:encoded>` : ''}
     </channel>
   </rss>
 `
