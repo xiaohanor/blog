@@ -6,24 +6,28 @@ import siteMetadata from '../data/siteMetadata.js'
 import tagData from '../app/tag-data.json' assert { type: 'json' }
 import { allBlogs } from '../.contentlayer/generated/index.mjs'
 import { sortPosts } from 'pliny/utils/contentlayer.js'
+import { marked } from 'marked' // 导入 marked
 
-// 修改后的 generateRssItem 函数，包含完整文章内容
-const generateRssItem = (config, post) => `
-  <item>
-    <guid>${config.siteUrl}/blog/${post.slug}</guid>
-    <title>${escape(post.title)}</title>
-    <link>${config.siteUrl}/blog/${post.slug}</link>
-    ${post.summary && `<description>${escape(post.summary)}</description>`}
-    <pubDate>${new Date(post.date).toUTCString()}</pubDate>
-    <author>${config.email} (${config.author})</author>
-    ${post.tags && post.tags.map((t) => `<category>${t}</category>`).join('')}
-    <content:encoded><![CDATA[
-      ${escape(post.body.raw)}
-    ]]></content:encoded>
-  </item>
-`
+// 修改 generateRssItem 函数以转换 Markdown 为 HTML
+const generateRssItem = (config, post) => {
+  const contentHtml = marked(post.body.raw) // 将 Markdown 转换为 HTML
+  return `
+    <item>
+      <guid>${config.siteUrl}/blog/${post.slug}</guid>
+      <title>${escape(post.title)}</title>
+      <link>${config.siteUrl}/blog/${post.slug}</link>
+      ${post.summary && `<description>${escape(post.summary)}</description>`}
+      <pubDate>${new Date(post.date).toUTCString()}</pubDate>
+      <author>${config.email} (${config.author})</author>
+      ${post.tags && post.tags.map((t) => `<category>${t}</category>`).join('')}
+      <content:encoded><![CDATA[
+        ${contentHtml}
+      ]]></content:encoded>
+    </item>
+  `
+}
 
-// 修改后的 generateRss 函数，添加命名空间声明
+// 修改 generateRss 函数，添加命名空间声明
 const generateRss = (config, posts, page = 'feed.xml') => `
   <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
     <channel>

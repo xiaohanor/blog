@@ -7374,6 +7374,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"marked@npm:^15.0.0":
+  version: 15.0.0
+  resolution: "marked@npm:15.0.0"
+  bin:
+    marked: bin/marked.js
+  checksum: b647884bf50f3120915088487818a0f454a976b7c2105ea6ce851b53a38775894aba8cb86473c16641d17029f3eac0cec8d3ee8df0391a3268cabb26ee371497
+  languageName: node
+  linkType: hard
+
 "mdast-util-find-and-replace@npm:^3.0.0":
   version: 3.0.1
   resolution: "mdast-util-find-and-replace@npm:3.0.1"
@@ -10854,6 +10863,7 @@ __metadata:
     husky: ^9.0.0
     image-size: 1.0.0
     lint-staged: ^13.0.0
+    marked: ^15.0.0
     next: 14.2.3
     next-contentlayer2: 0.4.6
     next-themes: ^0.3.0
