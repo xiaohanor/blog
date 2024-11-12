@@ -7,6 +7,7 @@ import tagData from '../app/tag-data.json' assert { type: 'json' }
 import { allBlogs } from '../.contentlayer/generated/index.mjs'
 import { sortPosts } from 'pliny/utils/contentlayer.js'
 
+// 修改后的 generateRssItem 函数，包含完整文章内容
 const generateRssItem = (config, post) => `
   <item>
     <guid>${config.siteUrl}/blog/${post.slug}</guid>
@@ -16,11 +17,15 @@ const generateRssItem = (config, post) => `
     <pubDate>${new Date(post.date).toUTCString()}</pubDate>
     <author>${config.email} (${config.author})</author>
     ${post.tags && post.tags.map((t) => `<category>${t}</category>`).join('')}
+    <content:encoded><![CDATA[
+      ${escape(post.body.raw)}
+    ]]></content:encoded>
   </item>
 `
 
+// 修改后的 generateRss 函数，添加命名空间声明
 const generateRss = (config, posts, page = 'feed.xml') => `
-  <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
     <channel>
       <title>${escape(config.title)}</title>
       <link>${config.siteUrl}/blog</link>
@@ -35,6 +40,7 @@ const generateRss = (config, posts, page = 'feed.xml') => `
   </rss>
 `
 
+// 生成RSS的主函数
 async function generateRSS(config, allBlogs, page = 'feed.xml') {
   const publishPosts = allBlogs.filter((post) => post.draft !== true)
   // RSS for blog post
@@ -43,6 +49,7 @@ async function generateRSS(config, allBlogs, page = 'feed.xml') {
     writeFileSync(`./public/${page}`, rss)
   }
 
+  // RSS for each tag
   if (publishPosts.length > 0) {
     for (const tag of Object.keys(tagData)) {
       const filteredPosts = allBlogs.filter((post) => post.tags.map((t) => slug(t)).includes(tag))
@@ -54,6 +61,7 @@ async function generateRSS(config, allBlogs, page = 'feed.xml') {
   }
 }
 
+// 调用生成RSS的函数
 const rss = () => {
   generateRSS(siteMetadata, allBlogs)
   console.log('RSS feed generated...')
