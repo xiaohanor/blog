@@ -3,9 +3,10 @@ import 'pliny/search/algolia.css'
 import 'remark-github-blockquote-alert/alert.css'
 
 import { Space_Grotesk } from 'next/font/google'
-import { Analytics, AnalyticsConfig } from 'pliny/analytics'
+//import { Analytics, AnalyticsConfig } from 'pliny/analytics'
 import { SearchProvider, SearchConfig } from 'pliny/search'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { Analytics } from "@vercel/analytics/react"
 import Header from '@/components/Header'
 import SectionContainer from '@/components/SectionContainer'
 import Footer from '@/components/Footer'

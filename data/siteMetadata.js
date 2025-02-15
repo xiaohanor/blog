@@ -37,7 +37,7 @@ const siteMetadata = {
     // If you are hosting your own Plausible.
     //   src: '', // e.g. https://plausible.my-domain.com/js/script.js
     // },
-    // simpleAnalytics: {},
+    //simpleAnalytics: {},
     // posthogAnalytics: {
     //   posthogProjectApiKey: '', // e.g. 123e4567-e89b-12d3-a456-426614174000
     // },
