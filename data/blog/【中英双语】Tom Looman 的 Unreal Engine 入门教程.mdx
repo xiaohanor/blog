@@ -4,13 +4,14 @@ date: 2025-01-21
 lastmod: 2025-01-21
 tags: ['UE', 'C++', '教程']
 draft: false
-summary: " Unreal Engine C++ 的参考指南"
-images: 
+summary: ' Unreal Engine C++ 的参考指南'
+images:
 authors:
   - default
 layout: PostLayout
 canonicalUrl:
 ---
+
 Getting started with Unreal Engine C++ can be a bit of a struggle. The resources online have no clear path to follow or fail to explain the _Unrealisms_ you’ll encounter. In this article, I’ll attempt to give you an overview of many unique aspects of Unreal’s C++ and briefly go over some of the native C++ features and how they are used in the context of Unreal Engine. It’s a compilation of the many different concepts that you will face when working in C++ and Unreal Engine specifically.  
 虚幻引擎 C++ 入门可能有点困难。在线资源没有明确的路径可以遵循，或者无法解释您将遇到的 Unrealisms。在本文中，我将尝试向您概述 Unreal C++ 的许多独特方面，并简要介绍一些原生 C++ 功能以及它们在 Unreal Engine 环境中的使用方式。它是你在 C++ 和 Unreal Engine 中工作时将面临的许多不同概念的汇编。
 
@@ -26,8 +27,9 @@ This guide is long, don’t forget to bookmark it!
 **Ready to become an Unreal Engine C++ master? Don’t miss this limited-time offer to join [my comprehensive course](https://courses.tomlooman.com/p/unrealengine-cpp?coupon_code=CPPGUIDE) and accelerate your learning journey!  
 准备好成为 Unreal Engine C++ 大师了吗？不要错过这个限时优惠，加入我的综合课程并加速您的学习之旅！**
 
-## C++ vs. Blueprints C++ 与蓝图 
-----------------------------
+## C++ vs. Blueprints C++ 与蓝图
+
+---
 
 Before we begin, a quick word on C++ vs. Blueprint. It’s the most common discussion in the community. I love C++ and Blueprint and heavily use both. Building a solid foundation in C++ (your _framework_) and creating small game-specific ‘scripts’ on top using Blueprint is an extremely powerful combination.  
 在我们开始之前，简单说一下 C++ 与 Blueprint 的对比。这是社区中最常见的讨论。我喜欢 C++ 和 Blueprint，并且大量使用两者。在 C++（您的框架）中构建坚实的基础并使用蓝图创建特定于游戏的小型“脚本”是一个非常强大的组合。
@@ -44,7 +46,7 @@ Building the foundational systems (eg. inventory system, world interaction, etc.
 **Alex Forsythe has a great video explaining [how C++ and Blueprint fit together](https://www.youtube.com/watch?v=VMZftEVDuCE)** and why you should use both instead of evangelizing one and dismissing the other.  
 Alex Forsythe 有一个很棒的视频，解释了 C++ 和 Blueprint 如何协同工作，以及为什么你应该同时使用两者，而不是宣传一个而忽视另一个。
 
-## C++ Syntax & Symbols  C++语法和符号
+## C++ Syntax & Symbols C++语法和符号
 
 Throughout the article, I’ll be using code snippets as concrete examples. You can find the reference [game example project](https://github.com/tomlooman/ActionRoguelike) over on GitHub. You can freely browse this repository to see more examples of how C++ is used with Unreal Engine.  
 在整篇文章中，我将使用代码片段作为具体示例。您可以在 GitHub 上找到参考游戏示例项目。你可以自由浏览此存储库，查看如何将 C++ 与 Unreal Engine 结合使用的更多示例。
@@ -52,12 +54,12 @@ Throughout the article, I’ll be using code snippets as concrete examples. You 
 While looking at C++ tutorials, you may be wondering about a few common symbols. I will explain their meaning and use cases without going too deep into their technical details. I’ll explain how they are most commonly used _within_ Unreal Engine gameplay programming, not C++ programming in general.  
 在查看 C++ 教程时，您可能想知道一些常见的符号。我将解释它们的含义和用例，但不会太深入地介绍它们的技术细节。我将解释它们在 Unreal Engine 游戏编程中最常用的方式，而不是一般的 C++ 编程。
 
-## Asterisk ‘\*’ (Pointers)  星号 '\*' （指针）
+## Asterisk ‘\*’ (Pointers) 星号 '\*' （指针）
 
 Commonly known as “pointers”, they may sound scarier than they actually are within Unreal Engine, as _most_ memory management is being taken care of while we’re dealing with gameplay programming. Most commonly used to **access objects like Actors in your level** and **references to assets** in your content folders such as sound effects or particle systems.  
 它们通常被称为“指针”，听起来可能比虚幻引擎中的实际情况更可怕，因为在我们处理游戏编程时，大多数内存管理都是在处理的。最常用于访问关卡中的 Actor 等对象，以及内容文件夹中的资源（如音效或粒子系统）的引用。
 
-### Pointers to Objects  指向对象的指针
+### Pointers to Objects 指向对象的指针
 
 The first way you’ll be using pointers is to access and track instances of your objects. In order to access your player, you’ll keep a _pointer to the player class_. For example, `AMyCharacter* MyPlayer;`  
 使用指针的第一种方式是访问和跟踪对象的实例。为了访问您的播放器，您将保留一个指向 player 类的指针。例如，AMyCharacter\* MyPlayer;
@@ -83,7 +85,6 @@ After running this code, the ‘PC’ variable is now pointing to the same place
       FocusedActor->Interact();
     }
 ```
-
 
 It’s important to check if pointers are not “null” (also written as “nullptr” in code, meaning not pointing to anything) before attempting to call functions or change its variables, or the engine will crash when executing that piece of code. So you will use the above if-statement often.  
 在尝试调用函数或更改其变量之前，请务必检查指针是否不是 “null” （在代码中也写为 “nullptr”，意味着不指向任何内容），否则引擎将在执行该段代码时崩溃。所以你会经常使用上面的 if 语句。
@@ -148,7 +149,7 @@ These benefits are for the editor only and in shipped builds it will function id
 TObjectPtr is only for the member properties in the headers, your C++ code in .cpp files continues to use raw pointers as there is no benefit to using TObjectPtr in functions and short-lived scope.  
 TObjectPtr 仅适用于标头中的成员属性，.cpp文件中的 C++ 代码将继续使用原始指针，因为在函数中使用 TObjectPtr 没有任何好处，并且生存期较短。
 
-### Pointers to Assets  指向资产的指针
+### Pointers to Assets 指向资产的指针
 
 The other common way to use pointers is to reference assets. These don’t represent instances in your world/level, but instead point to loaded content in memory such as textures, sound effects, meshes, etc. (it’s still pointing to an object, which in this case is the class representing a piece of content or an “in-memory representation of an asset on disk”).  
 使用指针的另一种常见方法是引用资产。这些不表示世界/关卡中的实例，而是指向内存中加载的内容，例如纹理、音效、网格等（它仍然指向一个对象，在本例中是表示一段内容的类或“磁盘上资源的内存中表示”）。
@@ -164,7 +165,7 @@ We can take a [projectile attack](https://github.com/tomlooman/ActionRoguelike/b
     UPROPERTY(EditAnywhere, Category = "Attack")
     UParticleSystem* CastingEffect;
     // Can point to an asset in our content folder, will be assigned something via the editor, not in the constructor as we did with components
-    
+
 ```
 
 Note that this pointer is going to be empty (_`nullptr`_) unless we assigned it to a specific ParticleSystem via the Editor. That’s why we add `UPROPERTY(EditAnywhere)` to expose the variable to be assigned in the editor.  
@@ -177,12 +178,13 @@ Now in the [class file of the projectile attack](https://github.com/tomlooman/Ac
 
 ```cpp
     UGameplayStatics::SpawnEmitterAttached(CastingEffect, Character->GetMesh(), HandSocketName, FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget);
-    
+
 ```
+
 Note: In this example, we didn’t check whether _CastingEffect_ is a nullptr before attempting to use it, the SpawnEmitterAttached function already does that and won’t crash if it wasn’t assigned a valid particle system.  
 注意：在此示例中，在尝试使用 CastingEffect 之前，我们没有检查 CastingEffect 是否为 nullptr，SpawnEmitterAttached 函数已经执行了该操作，如果未为其分配有效的粒子系统，则不会崩溃。
 
-## Period ‘.’ and Arrow operator ‘->’ (Accessing Variables/Functions)  句点 '.' 和箭头运算符 '->'（访问变量/函数）
+## Period ‘.’ and Arrow operator ‘->’ (Accessing Variables/Functions) 句点 '.' 和箭头运算符 '->'（访问变量/函数）
 
 Used to **access Variables or call Functions** of objects. You can type in the period ‘.’ and it automatically converts to ‘->’ in source editors like Visual Studio when used on a pointer. While they are similar in use, the ‘.’ is used on Value-types such as _structs_ (like FVector, FRotator, and FHitResult) and ‘->’ is generally used on _classes_ that you access using _Pointers_, like Actor, GameMode, ParticleSystem, etc.  
 用于访问对象的 Variables 或调用 Function。您可以键入句点 '.'，当用于指针时，它会在 Visual Studio 等源代码编辑器中自动转换为 '->'。虽然它们的使用方式相似，但 '.' 用于结构体（如 FVector、FRotator 和 FHitResult）等值类型，而 '->' 通常用于使用指针访问的类，如 Actor、GameMode、ParticleSystem 等。
@@ -192,24 +194,23 @@ Examples:
 
 ```cpp
     // pointer to Actor class called AMyCar ('A' prefix explained later)
-    AMyCar* MyCar = SpawnActor<AMyCar>(...); 
+    AMyCar* MyCar = SpawnActor<AMyCar>(...);
     // Calling function on class instance (pointer)
-    MyCar->StartEngine(); 
+    MyCar->StartEngine();
     // Getting variable from class instance (pointer)
-    float Variable = MyCar->EngineTorque; 
-    
+    float Variable = MyCar->EngineTorque;
+
     // struct containing line trace info
     FHitResult HitResult;
     // FHitResult is a struct, meaning we use it as a value type and not a class instance.
     FVector HitLocation = HitResult.ImpactLocation;
-    
+
 ```
 
 Note: You _can_ use pointers with value types like struct, float, etc. You often don’t use pointers on these types in _game code_, hence why I used this as the differentiator.  
 注意：您可以使用具有 struct、float 等值类型的指针。在游戏代码中，您通常不会对这些类型使用指针，因此我将其用作区分器。
 
-## Double Colon ‘::’  双冒号 '：：'
-
+## Double Colon ‘::’ 双冒号 '：：'
 
 Used to **access ‘static functions’ (and variables) on classes.** A good example is [UGameplayStatics](https://docs.unrealengine.com/latest/INT/API/Runtime/Engine/Kismet/UGameplayStatics/), which only consists of _static functions_, eg. to spawn particles and sounds. Generally, you’ll have very few static variables, so its main use is for easy-to-access functions. Static functions cannot be called on a class instance and only on the class type itself (see below).  
 用于访问类上的“静态函数”（和变量）。一个很好的例子是 UGameplayStatics，它只由静态函数组成，例如。生成粒子和声音。通常，您的静态变量非常少，因此它的主要用途是易于访问的函数。静态函数不能在 class 实例上调用，只能在 class type 本身上调用（见下文）。
@@ -219,7 +220,7 @@ Example of calling a static function on a class:
 
 ```cpp
     UGameplayStatics::PlaySoundAtLocation(this, SoundOnStagger, GetActorLocation());
-    
+
 ```
 
 Since these functions are static, they don’t belong to a specific ‘`UWorld`‘. `UWorld` is generally the level/world you play in, but within the editor, it could be many other things (the static mesh editor has its own `UWorld` for example). Many things need `UWorld`, and so you will often see the first parameter of static functions look like this:  
@@ -227,7 +228,7 @@ Since these functions are static, they don’t belong to a specific ‘`UWorld`�
 
 ```cpp
     static void PlaySoundAtLocation(const UObject* WorldContextObject, USoundBase* Sound, FVector Location, ...)
-    
+
 ```
 
 `UObject* WorldContextObject` can be anything that lives in the relevant world, such as the character that calls this function. And so most of the time you can pass ‘`this`‘ keyword as the first parameter. The ‘const’ keyword in front of the parameter means you cannot make changes to that `WorldContextObject` within the context of the function.  
@@ -241,23 +242,23 @@ You will also see a double colon when declaring the body of a function itself (r
     {
       // ... code in the function (this is in the .cpp file)
     }
-    
+
 ```
 
-## Ampersand ‘&’ (References & Address operator)  && （引用和地址运算符）
+## Ampersand ‘&’ (References & Address operator) && （引用和地址运算符）
 
 Also known as the reference symbol and address operator. I find that I don’t use this as often as the others within gameplay code specifically, but important to know how to use it nonetheless as you will need it to pass around functions when setting timers or binding input.  
 也称为引用符号和地址运算符。我发现我不像在游戏代码中那样经常使用它，但知道如何使用它很重要，因为在设置计时器或绑定输入时，您将需要它来传递函数。
 
-### Pass by Reference  按引用传递
+### Pass by Reference 按引用传递
 
 A common concept is to ‘_pass by reference_‘ a value type like a struct, or a big Array filled with thousands of objects. If you were to pass these variables into a function, without the reference symbol, two things happen:  
 一个常见的概念是 “通过引用传递” 一个值类型，比如一个 struct，或者一个充满数千个对象的大 Array。如果要将这些变量传递到函数中，而不使用引用符号，则会发生两种情况：
 
-*   The code creates a copy of the parameter value, in the case of a big array this can be costly and unnecessary.  
-    该代码会创建一个参数值的副本，如果数组很大，这可能成本高昂且不必要。
-*   More importantly, because a copy is created, you can’t simply change that variable and have it change in the ‘original’ variable too, you basically cloned it and left the original variable unchanged. If you want to change the original variable inside the function, you need to pass it in as a reference (**this is specific to value types** like float, bool, structs such as FVector, etc.) Let me give you an example.  
-    更重要的是，因为创建了一个副本，所以你不能简单地改变那个变量，然后让它也在 'original' 变量中改变，你基本上是克隆它并保持原始变量不变。如果你想改变函数内部的原始变量，你需要把它作为引用传入（这特定于 float、bool 等值类型，FVector 等结构体）。让我给你举个例子。
+- The code creates a copy of the parameter value, in the case of a big array this can be costly and unnecessary.  
+  该代码会创建一个参数值的副本，如果数组很大，这可能成本高昂且不必要。
+- More importantly, because a copy is created, you can’t simply change that variable and have it change in the ‘original’ variable too, you basically cloned it and left the original variable unchanged. If you want to change the original variable inside the function, you need to pass it in as a reference (**this is specific to value types** like float, bool, structs such as FVector, etc.) Let me give you an example.  
+  更重要的是，因为创建了一个副本，所以你不能简单地改变那个变量，然后让它也在 'original' 变量中改变，你基本上是克隆它并保持原始变量不变。如果你想改变函数内部的原始变量，你需要把它作为引用传入（这特定于 float、bool 等值类型，FVector 等结构体）。让我给你举个例子。
 
 ```cpp
     void ChangeTime(float TimeToUpdate)
@@ -265,7 +266,7 @@ A common concept is to ‘_pass by reference_‘ a value type like a struct, or 
         // add 1 second to the total time
         TimeToUpdate += 1.0f;
     }
-    
+
 ```
 
 Now calling this function as seen in the example below will print out 0.0f at the end since the original _TimeVar_ was never actually changed.  
@@ -273,11 +274,11 @@ Now calling this function as seen in the example below will print out 0.0f at th
 
 ```cpp
     float TimeVar = 0.0f;
-    
+
     ChangeTime(TimeVar);
-    
+
     print(TimeVar); // This would print out: 0.0f  - because we cloned the original variable, and didn't pass in the original into the function. So any change made to that value inside the function is lost.
-    
+
 ```
 
 Now we change the function to:  
@@ -289,7 +290,7 @@ Now we change the function to:
         // add 1 second to the total time
         TimeToUpdate += 1.0f;
     }
-    
+
 ```
 
 Now if we use the same code as before, we get a different result: The printed value would now be 1.0f.  
@@ -297,14 +298,14 @@ Now if we use the same code as before, we get a different result: The printed va
 
 ```cpp
     float TimeVar = 0.0f;
-    
+
     ChangeTime(TimeVar);
-    
+
     print(TimeVar); // This would print out: 1.0f - because we passed in the original value by reference, let the function add 1.0f and so it updated TimeVar instead of a copy.
-    
+
 ```
 
-### Address Operator  地址运算符
+### Address Operator 地址运算符
 
 Another important use is the _address operator_, which even lets us pass functions as parameters into other functions. This is very useful for binding user input and [setting timers](https://www.tomlooman.com/unreal-engine-cpp-timers/) to trigger specific functions.  
 另一个重要的用途是 address 运算符，它甚至允许我们将函数作为参数传递给其他函数。这对于绑定用户输入和设置计时器以触发特定功能非常有用。
@@ -317,11 +318,11 @@ The _BindAxis_ function in the example below needs to know which function to cal
     void ASCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
     {
       Super::SetupPlayerInputComponent(PlayerInputComponent);
-    
+
       PlayerInputComponent->BindAxis("MoveForward", this, &ASCharacter::MoveForward);
       PlayerInputComponent->BindAxis("MoveRight", this, &ASCharacter::MoveRight);
     }
-    
+
 ```
 
 Another common use case is to pass a function into timers. The third parameter is again the function we pass in to be called when the timer elapses.  
@@ -330,10 +331,10 @@ Another common use case is to pass a function into timers. The third parameter i
 ```cpp
     // Activate the fuze to explode the bomb after several seconds
     GetWorldTimerManager().SetTimer(FuzeTimerHandle, this, &ASBombActor::Explode, MaxFuzeTime, false);
-    
+
 ```
 
-## Public, Protected, Private  公共、受保护、私有
+## Public, Protected, Private 公共、受保护、私有
 
 These keywords can mark variables and functions in the header file to give ‘access rights’ for other classes and class instances.  
 这些关键字可以在头文件中标记变量和函数，以授予其他类和类实例的“访问权限”。
@@ -353,13 +354,13 @@ Generally, you only want to expose what can be safely called/changed from the ou
 ```cpp
     private:
       int32 MyInt;
-    
+
     public:
       void SetMyInt(int32 NewInt);
-    
+
 ```
 
-## Forward Declaring Classes  前向声明类
+## Forward Declaring Classes 前向声明类
 
 Forward declaring C++ classes is done in header files and is done instead of including the full files via `#include`. The purpose of forward declaring is to reduce compile times and dependencies between classes compared to including the .h file.  
 前向声明C++类是在头文件中完成的，而不是通过 #include 包含完整文件。与包含 .h 文件相比，前向声明的目的是减少编译时间和类之间的依赖关系。
@@ -372,17 +373,17 @@ Let’s say we wish to use `UParticleSystem` class in another header named `MyCh
     #include "GameFramework/Character.h"
     #include "SCharacter.generated.h"
     //#include "ParticleSystem.h" // << We don't need to include the entire file
-    
+
     class UParticleSystem; // << We can instead just 'forward declare' the type.
-    
+
     UCLASS()
     class ACTIONROGUELIKE_API ASCharacter : public ACharacter
     {
       GENERATED_BODY()
-    
+
       UParticleSystem* CastingEffect;
     // ...
-    
+
 ```
 
 The `class` keyword provides the minimum the compiler requires to understand that word is in fact a _class_. If we included the .h file for the class instead this could negatively impact our compile times. Any changes to the included header (eg. including your MyCharacter.h elsewhere in your code) will cause the classes which include said header to re-compile too.  
@@ -394,7 +395,7 @@ Here is the [character class](https://github.com/tomlooman/ActionRoguelike/blob/
 Forward Declaration is mentioned in [Epic’s Coding Standards](https://docs.unrealengine.com/4.27/en-US/ProductionPipelines/DevelopmentSetup/CodingStandard/#physicaldependencies) as well. _“If you can use forward declarations instead of including a header, do so.”_  
 Forward Declaration 在 Epic 的编码标准中也有提及。“如果可以使用 forward declarations 而不是包含 header，请这样做。”
 
-## Casting (Cast) 
+## Casting (Cast)
 
 _Casting_ to specific classes is something you’ll use all the time. Casting pointers in Unreal Engine is a bit different from ‘raw C++’ in that it’s safe to cast to types that might not be valid, your code won’t crash and instead just returns a _nullptr_ (null pointer).  
 强制转换到特定类是您将一直使用的东西。在虚幻引擎中转换指针与“原始 C++”略有不同，因为可以安全地转换到可能无效的类型，你的代码不会崩溃，而只会返回一个 nullptr（空指针）。
@@ -408,9 +409,9 @@ As an example, you might want to Cast your APawn\* (pointer) to your own charact
     if (MyCharacter) // verify the cast succeeded before calling functions
     {
       // Respawn() is defined in ASCharacter, and doesn't exist in the base class APawn. Therefore we must first Cast to the appropriate class.
-      MyCharacter->Respawn(); 
+      MyCharacter->Respawn();
     }
-    
+
 ```
 
 It’s not always preferable to cast to specific classes, especially in Blueprint as this can have a negative impact on how much data needs to be loaded into memory. Any time you add a Cast to a certain Blueprint class on your EventGraph that object will be loaded into memory immediately (not when the Cast-node is hit at runtime, but as soon as the Blueprint itself gets loaded/created), causing a cascade of loaded objects. Especially when Blueprints reference a lot of assets (meshes, particles, textures) this has a large impact on your project’s (load/memory) performance.  
@@ -431,7 +432,7 @@ C++ 示例：仅当函数或变量 required 首次在该类中声明时，才强
 One way to reduce class dependencies is through interfaces…so that’s what we will talk about next.  
 减少类依赖的一种方法是通过接口......这就是我们接下来要讨论的内容。
 
-## Interfaces  接口
+## Interfaces 接口
 
 [Interfaces](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/GameplayArchitecture/Interfaces/) are a great way to add functions to multiple classes without specifying any actual functionality yet (implementation). Your player might be able to interact with a large variety of different Actors in the level, each with a different reaction/implementation. A lever might animate, a door could open or a key gets picked up and added to the inventory.  
 接口是向多个类添加函数的好方法，而无需指定任何实际功能（实现）。您的玩家可能能够与关卡中的各种不同 Actor 交互，每个 Actor 都有不同的反应/实现。拉杆可能会动画化，门可以打开，或者钥匙被拾取并添加到库存中。
@@ -452,21 +453,21 @@ Interfaces are a little odd at first in C++ as they require two classes with dif
     {
       GENERATED_BODY()
     };
-    
+
     /**
-     * 
+     *
      */
     class ACTIONROGUELIKE_API ISGameplayInterface
     {
       GENERATED_BODY()
-    
+
       // Add interface functions to this class. This is the class that will be inherited to implement this interface.
     public:
-    
+
       UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
       void Interact(APawn* InstigatorPawn);
     };
-    
+
 ```
 
 With the interface class defined you can ‘inherit’ from it in other C++ classes and implement actual behavior. For this, you use the “I” prefixed class name. Next to `public AActor` we add `, public ISGameplayInterface` to specify we want to inherit the functions from the interface.  
@@ -477,11 +478,11 @@ With the interface class defined you can ‘inherit’ from it in other C++ clas
     class ACTIONROGUELIKE_API ASItemChest : public AActor, public ISGameplayInterface // 'inherit' from interface
     {
       GENERATED_BODY()
-    
+
       // declared as _Implementation since we defined the function in interface as BlueprintNativeEvent
-      void Interact_Implementation(APawn* InstigatorPawn); 
+      void Interact_Implementation(APawn* InstigatorPawn);
     }
-    
+
 ```
 
 _BlueprintNativeEvent_ is useful to allow C++ to provide a base implementation, Blueprint child classes can then override or extend this function. In C++ the function implementation will have an \_Implementation suffix added. This is from code generated by Unreal.  
@@ -494,14 +495,13 @@ In order to check whether a specific class implements (inherits from) the interf
     if (MyActor->Implements<USGameplayInterface>())
     {
     }
-    
+
 ```
 
 Calling interface functions is again unconventional. The signature looks as follows: `IMyInterface::Execute_YourFunctionName(ObjectToCallOn, Params);` This is another case where you use the “I” prefixed class.  
 调用接口函数也是非常规的。签名如下所示： `IMyInterface::Execute_YourFunctionName(ObjectToCallOn, Params);` 这是使用“I”前缀类的另一种情况。
 
 `ISGameplayInterface::Execute_Interact(MyActor, MyParam1);`
-
 
 **Important:** There are other ways to call this function, such as casting your Actor to the interface type and calling the function directly. However, this fails entirely when interfaces are added/inherited to your class in Blueprint instead of in C++, so it’s recommended to just avoid that altogether.  
 重要提示： 还有其他方法可以调用此函数，例如将 Actor 强制转换为接口类型并直接调用该函数。但是，当接口在 Blueprint 而不是 C++ 中添加/继承到您的类时，这完全会失败，因此建议完全避免这种情况。
@@ -512,7 +512,7 @@ However, if you want to share functionality between Actors but don’t want to u
 [Steve Streeting](https://www.stevestreeting.com/2020/11/02/ue4-c-interfaces-hints-n-tips/) has more details on using Interfaces which I recommend checking out. There is a code example in the Action Roguelike project as well using [SGameplayInterface](https://github.com/tomlooman/ActionRoguelike/blob/master/Source/ActionRoguelike/Public/SGameplayInterface.h) used by [InteractionComponent](https://github.com/tomlooman/ActionRoguelike/blob/dc18d0b1267ddc6f6640b55d2c7ca4b2fd54bdcd/Source/ActionRoguelike/Private/SInteractionComponent.cpp#L137) to call `Interact()` on any Actor implementing the interface.  
 Steve Streeting 提供了有关使用 Interfaces 的更多详细信息，我建议查看。Action Roguelike 项目中也有一个代码示例，使用 InteractionComponent 使用的 SGameplayInterface 在实现该接口的任何 Actor 上调用 Interact（）。
 
-## Delegates (Events)  委托 （事件）
+## Delegates (Events) 委托 （事件）
 
 Delegates (also known as Events) allow code to call one or multiple _bound_ functions when triggered. Sometimes you’ll see this referred to as Callbacks. For example, It can be incredibly helpful to bind/listen to a delegate and be notified when a value (such as character health) changes. This can be a lot more efficient than polling whether something changes during `Tick()`.  
 委托（也称为 Events）允许代码在触发时调用一个或多个绑定函数。有时，您会看到这称为 Callbacks。例如，绑定/侦听代理并在值（例如角色生命值）发生变化时收到通知，这可能非常有用。这比轮询 Tick（） 期间是否有变化要高效得多。
@@ -520,7 +520,7 @@ Delegates (also known as Events) allow code to call one or multiple _bound_ func
 There are several types of these delegates/events. I’ll explain the most commonly used ones for game code using practical examples rather than low-level language details. I’m also not covering all the different ways of binding (only focusing on the more practical ways instead) or niche use cases, you can find more details on the [official documentation](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/ProgrammingWithCPP/UnrealArchitecture/Delegates/) for those.  
 这些委托/事件有几种类型。我将使用实际示例而不是低级语言细节来解释游戏代码中最常用的 Cookies。我也没有涵盖所有不同的绑定方式（只关注更实用的方法）或小众用例，你可以在官方文档中找到更多详细信息。
 
-## Declaring and Using Delegates  声明和使用委托
+## Declaring and Using Delegates 声明和使用委托
 
 You start by declaring the delegate with a MACRO. There are variants available to allow passing in parameters, these have the following suffix. \_OneParam, \_TwoParams, \_ThreeParams, etc. You define these in the header file, ideally, above the class where you want to call them.  
 首先使用 MACRO.有一些变体可用于允许传入参数，这些变体具有以下后缀。\_OneParam、\_TwoParams、\_ThreeParams等。您可以在头文件中定义这些值，理想情况下，在要调用它们的类的上方。
@@ -529,13 +529,13 @@ You start by declaring the delegate with a MACRO. There are variants available t
     // These macros will sit at the top of your header files.
     DECLARE_DYNAMIC_MULTICAST_DELEGATE()
     DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams()
-    
+
 ```
 
 We’ll start by showing the process of declaring and using delegates in detail with a commonly used type, and then explain the other types more briefly as they share the same concepts.  
 首先，我们将详细展示使用常用类型声明和使用委托的过程，然后更简要地解释其他类型，因为它们具有相同的概念。
 
-## Multicast Dynamic  组播动态
+## Multicast Dynamic 组播动态
 
 One of the most used types of delegate in your game code as they can be exposed to Blueprint to bind and receive callbacks.  
 游戏代码中最常用的代理类型之一，因为它们可以公开给蓝图以绑定和接收回调。
@@ -549,7 +549,7 @@ The macros take at least one parameter, which defines their name. eg. _FOnAttrib
 ```cpp
     DECLARE_DYNAMIC_MULTICAST_DELEGATE(<typename>)
     DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(<typename>, <paramtype1>, <paramvarname1>, <paramtype2>,<paramvarname2>)
-    
+
 ```
 
 Here is one example of a delegate with four parameters to notify code about a change to an attribute. The type and variable names are split by commas, unlike normal functions.  
@@ -557,7 +557,7 @@ Here is one example of a delegate with four parameters to notify code about a ch
 
 ```cpp
     DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnAttributeChanged, AActor, InstigatorActor, USAttributeComponent, OwningComp, float, NewValue, float, Delta);
-    
+
 ```
 
 You now add the delegate in your class header, which may look as follows:  
@@ -566,25 +566,25 @@ You now add the delegate in your class header, which may look as follows:
 ```cpp
     UPROPERTY(BlueprintAssignable, Category = "Attributes")
     FOnAttributeChanged OnHealthChanged;
-    
+
 ```
 
 You may have noticed BlueprintAssignable, this is a powerful feature of the Dynamic delegates which can be exposed to Blueprint and used on the EventGraph.  
 您可能已经注意到 BlueprintAssignable，这是 Dynamic 委托的一个强大功能，可以公开给蓝图并在 EventGraph 上使用。
 
-### Executing Delegates  执行委托
+### Executing Delegates 执行委托
 
 Finally, to actually trigger the callback we call OnHealthChanged\*.Broadcast()\* and pass in the expected parameters.  
 最后，为了实际触发回调，我们调用 OnHealthChanged\*。Broadcast（）\* 并传入预期的参数。
 
 ```cpp
     OnHealthChanged.Broadcast(InstigatorActor, this, NewHealth, Delta);
-    
+
 ```
 
-### Binding to Delegates  绑定到委托
+### Binding to Delegates 绑定到委托
 
-#### Binding in C++  C++ 中的绑定
+#### Binding in C++ C++ 中的绑定
 
 You should \*never\* bind your delegates in the constructor and choose either `AActor::PostInitializeComponents()` or `BeginPlay()` to avoid issues where delegates get serialized into the Blueprint and will still be called even when you later remove the delegate binding in C++.  
 您永远不要在构造函数中绑定代理，并选择 `AActor::PostInitializeComponents()` 或 BeginPlay（） 以避免代理序列化到蓝图中，并且即使您稍后在 C++ 中删除代理绑定，仍将被调用的问题。
@@ -599,10 +599,10 @@ You can bind to a delegate calling `.AddDynamic()`. The first parameter takes a 
     void ASAICharacter::PostInitializeComponents()
     {
       Super::PostInitializeComponents();
-    
+
       AttributeComp->OnHealthChanged.AddDynamic(this, &ASAICharacter::OnHealthChanged);
     }
-    
+
 ```
 
 The above OnHealthChanged function is declared with `UFUNCTION()` in the header.  
@@ -611,10 +611,10 @@ The above OnHealthChanged function is declared with `UFUNCTION()` in the header.
 ```cpp
     UFUNCTION()
     void OnHealthChanged(AActor* InstigatorActor, USAttributeComponent* OwningComp, float NewHealth, float Delta);
-    
+
 ```
 
-#### Binding in Blueprint  蓝图中的绑定
+#### Binding in Blueprint 蓝图中的绑定
 
 You can easily bind your dynamic delegates in Blueprint. When implemented on an ActorComponent as in the example below you can select the Component in the outliner and click the “+” symbol in its details panel. This creates the Delegate on the EventGraph and is already bound for us.  
 您可以在 Blueprint 中轻松绑定动态代理。在 ActorComponent 上实现时，如下例所示，您可以在大纲视图中选择该组件，然后单击其详细信息面板中的“+”符号。这将在 EventGraph 上创建 Delegate，并且已经为我们绑定了代理。
@@ -629,10 +629,10 @@ You can also manually bind the delegates via the EventGraph (eg. binding to anot
 Note: Dynamic delegates are less performant than non-dynamic (seen below) variants. It’s therefore advisable to only use this type when you want to expose it to Blueprint.  
 注意：动态委托的性能低于非动态（见下文）变体。因此，建议仅在你想将其公开给 Blueprint 时才使用此类型。
 
-### C++ Delegates  C++ 委托
+### C++ Delegates C++ 委托
 
 Macro: `DECLARE_DELEGATE`, `DECLARE_DELEGATE_OneParam`  
-宏：DECLARE\_DELEGATE、DECLARE\_DELEGATE\_OneParam
+宏：DECLARE_DELEGATE、DECLARE_DELEGATE_OneParam
 
 When used only in C++ we can define delegates with an unspecified amount of parameters. In the following example, we’ll use a more complex use case which is asynchronously loading game assets.  
 当仅在 C++ 中使用时，我们可以定义具有未指定数量的参数的委托。在以下示例中，我们将使用一个更复杂的用例，即异步加载游戏资产。
@@ -653,12 +653,12 @@ The following is taken from `SGameModeBase` in the ActionRoguelike project ([lin
     {
       // Primary Id is part of AssetManager, we grab one from a DataTable
       FPrimaryAssetId MonsterId = SelectedMonsterRow->MonsterId;
-    
+
       TArray<FName> Bundles;
-    
+
       // A very different syntax, we create a delegate via CreateUObject and pass in the parameters we want to use once loading has completed several frames or seconds later. (In this case the MonsterId is the asset we are loading via LoadPrimaryAsset and Locations[0] is the desired spawn location once loaded)
       FStreamableDelegate Delegate = FStreamableDelegate::CreateUObject(this, &ASGameModeBase::OnMonsterLoaded, MonsterId, Locations[0]);
-    
+
       // Requests the load in Asset Manager on the MonsterId (first param) and passes in the Delegate we just created
       Manager->LoadPrimaryAsset(MonsterId, Bundles, Delegate);
     }
@@ -680,7 +680,7 @@ There is a lot more to talk about, but this should provide a core understanding 
 To read more about delegates I recommend BenUI’s [Intro to Delegates](https://benui.ca/unreal/delegates-intro/) and [Advanced Delegates in C++](https://benui.ca/unreal/delegates-advanced/).  
 要了解更多关于委托的信息，我推荐 BenUI 的 C++ 委托介绍和高级委托。
 
-## Public/Private Folders  公共/私人文件夹
+## Public/Private Folders 公共/私人文件夹
 
 Public and private folders define which files are available to use in other modules. Generally, your header files are placed in the Public folder so other modules can gain access and the cpp files are in the Private folder. Headers that are not meant to be used directly by other modules can go into the Private folder as well.  
 Public 和 private 文件夹定义哪些文件可在其他模块中使用。通常，您的头文件放在 Public 文件夹中，以便其他模块可以访问，而 cpp 文件位于 Private 文件夹中。不打算被其他模块直接使用的 Headers 也可以进入 Private 文件夹。
@@ -691,7 +691,7 @@ Your primary game module doesn’t need this public/private structure if you don
 I recommend checking out [Ari’s talk on modules](https://dev.epicgames.com/community/learning/tutorials/xJ/improving-code-structure-with-unreal-engine-s-c-modules) for more information on Modules and how to use them.  
 我建议查看 Ari 关于模块的演讲，以获取有关模块以及如何使用它们的更多信息。
 
-## Class Prefixes (F, A, U, E, G, T, …)  类前缀 （F， A， U， E， G， T， ...）
+## Class Prefixes (F, A, U, E, G, T, …) 类前缀 （F， A， U， E， G， T， ...）
 
 Classes in Unreal have a prefix, for example, the class ‘Actor’ is named ‘AActor’ when seen in C++.  These are helpful in telling you more about the type of object. Here are a few important examples.  
 Unreal 中的类有一个前缀，例如，在 C++ 中可以看到类 'Actor' 时命名为 'AActor'。这些有助于您了解有关对象类型的更多信息。以下是一些重要示例。
@@ -717,10 +717,10 @@ E.枚举类型的约定。（EEnvQueryStatus、EConstraintType、...）
 ```cpp
     // A list of strings.
     TArray<FString> MyStrings;
-    
+
     // A list of actors
     TArray<AActor*> MyActors;
-    
+
     // Can be assigned with a CLASS (not an instance of an actor) that is either a GameMode class or derived from GameMode.
     TSubclassOf<AGameMode> SubclassOfActor;
 ```
@@ -737,7 +737,7 @@ _“Tim Sweeney wrote the original “FVector” class along with many of the or
 _“This was in the mid-nineties sometime. Even though most of Unreal Engine has been rewritten a few times over since then, some of the original math classes still resemble their Unreal 1 counterparts, and certain idioms remain part of Epic’s coding standard today.”  
 “那是在 90 年代中期的某个时候。尽管从那时起，虚幻引擎的大部分内容已经被重写了几次，但一些原始的数学类仍然类似于 Unreal 1 中的对应项，并且某些习语今天仍然是 Epic 编码标准的一部分。_
 
-## Project Prefixes  项目前缀
+## Project Prefixes 项目前缀
 
 Projects in Unreal should use their own (unique) prefix to signify their origin. For example, all classes in Unreal Tournament use “UT” (`AUTActor`, `UUTAbility`), and Fortnite uses “Fort” prefix (`AFortActor`, `UFortAbility`, etc).  
 Unreal 中的项目应使用自己的（唯一）前缀来表示其来源。例如，虚幻竞技场中的所有类都使用 “UT” （AUTActor， UUTAbility），而 Fortnite 使用 “Fort” 前缀 （AFortActor， UFortAbility 等）。
@@ -745,7 +745,7 @@ Unreal 中的项目应使用自己的（唯一）前缀来表示其来源。例�
 In the many code examples in this guide, I used “S” as the prefix. These examples are from the [Action Roguelike](https://github.com/tomlooman/ActionRoguelike/tree/master/Source/ActionRoguelike/Private) project. _(Note: Since Unreal’s Widgets/Slate already uses “S” as a prefix one could argue I should have used “SU” or some other more unique prefix – in all these years I’ve never had any issue with this – so it’s been more of a cosmetic issue)._  
 在本指南的许多代码示例中，我使用了 “S” 作为前缀。这些示例来自 Action Roguelike 项目。（注意：由于 Unreal 的 Widgets/Slate 已经使用“S”作为前缀，因此有人可能会争辩说我应该使用“SU”或其他更独特的前缀 - 这些年来，我从来没有遇到过这个问题 - 所以这更像是一个表面问题）。
 
-## Common Engine Types  常见发动机类型
+## Common Engine Types 常见发动机类型
 
 Besides the standard types like `float`, `int32`, `bool`, which I won’t cover as there is nothing too special to them within Unreal Engine – Unreal has built-in classes to handle very common logic that you will use a lot throughout your programming. Here are a few of the most commonly seen types from Unreal that you will use. Luckily the official documentation has some information on these types, so I will be referring to that a lot.  
 除了 float、int32、bool 等标准类型之外，我不会介绍这些类型，因为在 Unreal Engine 中它们没有什么特别之处——Unreal 有内置的类来处理你在整个编程过程中会经常使用的非常常见的逻辑。以下是您将使用的一些最常见的 Unreal 类型。幸运的是，官方文档有一些关于这些类型的信息，所以我会经常提到。
@@ -787,17 +787,17 @@ FTransform 由 FVector （位置）、FRotator （旋转） 和 FVector （3 轴
 _**FQuat**_, another variable that can specify a rotation also known by its full name as [Quaternion](https://en.wikipedia.org/wiki/Quaternion), you will mostly use FRotator in game-code however, FQuat is less used outside the engine modules although it can prevent [Gimbal lock](https://en.wikipedia.org/wiki/Gimbal_lock). (It’s also not exposed to Blueprint)  
 FQuat，另一个可以指定旋转的变量，其全名也称为 Quaternion，您将主要在游戏代码中使用 FRotator，但是，FQuat 在引擎模块之外较少使用，尽管它可以防止万向节锁定。（它也不会暴露在 Blueprint 中）
 
-## TArray, TMap, TSet  
+## TArray, TMap, TSet
 
 Basically variations of lists of objects/values. Array is a simple list that you can add/remove items to and from. [_TMaps_](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TMap/index.html) are dictionaries, meaning they have Keys and Values (where the Key must always be unique) eg. `TMap<int32, Actor>` where a bunch of Actors are mapped to unique integers. And finally, [_TSet_](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TSet/index.html) which is an optimized (hashed) version of [_TArray_](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TArrays/index.html), requires items in the list to be unique. Can be great for certain performance scenarios, but typically you would use TArray, unless you find you need to squeeze performance out of a specific piece of code.  
 基本上是对象/值列表的变体。数组 是一个简单的列表，您可以在其中添加/删除项目。TMap 是字典，这意味着它们有 Keys 和 Values（其中 Key 必须始终是唯一的），例如。TMap，其中一组 Actor 被映射到唯一的整数。最后，TSet 是 TArray 的优化（哈希）版本，它要求列表中的项目是唯一的。对于某些性能方案可能非常有用，但通常您会使用 TArray，除非您发现需要从特定代码段中挤出性能。
 
-*   [Arrays in Unreal Engine](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TArrays/index.html).  
-    Unreal Engine 中的数组。
-*   [TMaps (aka Dictionaries)  
-    TMaps（又名词典）](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TMap/index.html)
-*   [TSet  
-    塞特](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TSet/index.html)
+- [Arrays in Unreal Engine](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TArrays/index.html).  
+  Unreal Engine 中的数组。
+- [TMaps (aka Dictionaries)  
+  TMaps（又名词典）](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TMap/index.html)
+- [TSet  
+  塞特](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TSet/index.html)
 
 ## TSubclassOf
 
@@ -820,15 +820,15 @@ Here we use the TSubclassOf variable ProjectileClass to spawn a new instance: ([
     GetWorld()->SpawnActor<AActor>(ProjectileClass, SpawnTM, SpawnParams);
 ```
 
-*   [Documentation on TSubclassOf  
-    有关 TSubclassOf 的文档](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TSubclassOf/index.html)
+- [Documentation on TSubclassOf  
+  有关 TSubclassOf 的文档](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/TSubclassOf/index.html)
 
-## C++ MACROS (& Unreal Property System)  C++宏（&虚幻属性系统）
+## C++ MACROS (& Unreal Property System) C++宏（&虚幻属性系统）
 
 The ALL CAPS _preprocessor directives_ are used by the compiler to ‘unfold’ into (large) pieces of code. In Unreal Engine, it’s most often used by the _[Unreal Property System](https://www.unrealengine.com/en-US/blog/unreal-property-system-reflection)_ and to add boilerplate code to our class headers. These examples are all macros, but Macros can be used for a lot more than shown below.  
 编译器使用 ALL CAPS 预处理器指令将 ALL CAPS 预处理器指令“展开”为（大）代码段。在 Unreal Engine 中，它最常用于 Unreal Property System，并将样板代码添加到我们的类标头中。这些示例都是宏，但宏的用途远不止下面显示的。
 
-## UFUNCTION()  
+## UFUNCTION()
 
 Allows extra markup on functions, and exposes it to the [Property System (Reflection)](https://www.unrealengine.com/en-US/blog/unreal-property-system-reflection) of Unreal. Commonly used to expose functions to Blueprint. Sometimes required by the engine to bind functions to delegates (eg. binding a timer to call a function).  
 允许在函数上进行额外标记，并将其公开给 Unreal 的 Property System （Reflection） （属性系统（反射））。通常用于向 Blueprint 公开函数。有时引擎需要将函数绑定到委托（例如，绑定计时器以调用函数）。
@@ -840,13 +840,13 @@ Here is [additional information in a blog post](https://www.tomlooman.com/ue4-uf
     // Can be called by Blueprint
     UFUNCTION(BlueprintCallable, Category = "Action")
     bool IsRunning() const;
-    
+
     // Can be overriden by Blueprint to override/extend behavior but cannot be called by Blueprint (only C++)
     UFUNCTION(BlueprintNativeEvent, Category = "Action")
     void StartAction(AActor* Instigator);
 ```
 
-## UPROPERTY()  
+## UPROPERTY()
 
 Allows marking-up variables, and exposing them to the [Property System (Reflection)](https://www.unrealengine.com/en-US/blog/unreal-property-system-reflection) of Unreal. Commonly used to expose your C++ to Blueprint but it can do a lot more using this large list of [property specifiers](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/GameplayArchitecture/Properties/Specifiers/). Again, it’s worth checking out [BenUI’s article](https://benui.ca/unreal/uproperty/) on UPROPERTY specifiers.  
 允许标记变量，并将它们公开给 Unreal 的 Property System （Reflection） （属性系统（反射））。通常用于将 C++ 公开给蓝图，但使用这个庞大的属性说明符列表，它可以做更多的事情。同样，值得一看 BenUI 关于 UPROPERTY 说明符的文章。
@@ -855,20 +855,20 @@ Allows marking-up variables, and exposing them to the [Property System (Reflecti
     // Expose to Blueprint and allow editing of its defaults and only grant read-only access in the node graphs.
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
     TSoftObjectPtr<UTexture2D> Icon;
-    
+
     // Mark 'replicated' to be synchronized between client and server in multiplayer.
     UPROPERTY(Replicated)
     USActionComponent* ActionComp;
 ```
 
-## GENERATED\_BODY()  
+## GENERATED_BODY()
 
 At the top of classes and structs and used by Unreal to add boilerplate code required by the engine.  
 位于类和结构体的顶部，并被 Unreal 用于添加引擎所需的样板代码。
 
 `GENERATED_BODY()`
 
-## USTRUCT, UCLASS, UENUM  
+## USTRUCT, UCLASS, UENUM
 
 These macros are required when defining new classes, structs, and enums in Unreal Engine. When you create your new class, this is already added for you in the Header. By default, they will be empty like `UCLASS()` but can be used to add additional markup to an object for example  
 在 Unreal Engine 中定义新类、结构和枚举时，需要这些宏。当您创建新类时，它已添加到 Header 中。默认情况下，它们将像 UCLASS（） 一样为空，但可用于向对象添加其他标记，例如
@@ -880,9 +880,10 @@ These macros are required when defining new classes, structs, and enums in Unrea
     }
 ```
 
-UE\_LOG (Logging)  
-UE\_LOG （日志记录）
-----------------------------------
+UE_LOG (Logging)  
+UE_LOG （日志记录）
+
+---
 
 Macro to easily log information including a category (eg. LogAI, LogGame, LogEngine) and a severity (eg. Log, Warning, Error, or Verbose) and can be an incredibly valuable tool to verify your code by printing out some data while playing your game much like _PrintString_ in Blueprint.  
 Macro 轻松记录信息，包括类别（例如。LogAI、LogGame、LogEngine）和严重性（例如。Log、Warning、Error 或 Verbose），并且可以是一个非常有价值的工具，通过在玩游戏时打印一些数据来验证您的代码，就像蓝图中的 PrintString 一样。
@@ -891,19 +892,19 @@ Macro 轻松记录信息，包括类别（例如。LogAI、LogGame、LogEngine�
     // The simple logging without additional info about the context
     UE_LOG(LogAI, Log, TEXT("Just a simple log print"));
     // Putting actual data and numbers here is a lot more useful though!
-    UE_LOG(LogAI, Warning, TEXT("X went wrong in Actor %s"), *GetName()); 
+    UE_LOG(LogAI, Warning, TEXT("X went wrong in Actor %s"), *GetName());
 ```
 
 The above syntax may look a bit scary. The third parameter is a string we can fill with useful data, in the above case we print the name of the object so we know in which instance this happened. The asterisk (\*) before `GetName()` is used to convert the return value to the correct type (from FString returned by the function to Char\[\] for the macro). The Unreal Wiki has a lot more [detailed explanation on logging](https://unrealcommunity.wiki/logging-lgpidy6i).  
 上面的语法可能看起来有点吓人。第三个参数是一个字符串，我们可以填充有用的数据，在上面的情况下，我们打印对象的名称，以便我们知道这是在哪个实例中发生的。GetName（） 前面的星号 （\*） 用于将返回值转换为正确的类型（从函数返回的 FString 转换为宏的 Char\[\]）。Unreal Wiki 对日志记录有更详细的解释。
 
-##Modules  模块
+##Modules 模块
 
 Unreal Engine consists of a large number (1000+) of individual modules. Your game code is contained in one or multiple modules. You can place your game-specific logic in one module, and your more generic framework logic for multiple games in another to keep a separation of dependencies.  
 Unreal Engine 由大量 （1000+） 个单独的模块组成。您的游戏代码包含在一个或多个模块中。您可以将特定于游戏的逻辑放在一个模块中，将多个游戏的更通用的框架逻辑放在另一个模块中，以保持依赖项的分离。
 
-You can find examples of these code modules in your engine installation folder (eg. _Epic Games\\UE\_5.0\\Engine\\Source\\Runtime\\AIModule_) where each module has its own `[YourModuleName].build.cs` file to configure itself and its dependencies.  
-您可以在引擎安装文件夹中找到这些代码模块的示例（例如。Epic Games\\UE\_5.0\\Engine\\Source\\Runtime\\AIModule），其中每个模块都有自己的 \[YourModuleName\].build.cs 文件来配置自身及其依赖项。
+You can find examples of these code modules in your engine installation folder (eg. _Epic Games\\UE_5.0\\Engine\\Source\\Runtime\\AIModule_) where each module has its own `[YourModuleName].build.cs` file to configure itself and its dependencies.  
+您可以在引擎安装文件夹中找到这些代码模块的示例（例如。Epic Games\\UE_5.0\\Engine\\Source\\Runtime\\AIModule），其中每个模块都有自己的 \[YourModuleName\].build.cs 文件来配置自身及其依赖项。
 
 Not every module is loaded by default. When programming in C++ you sometimes need to include additional modules to access their code. One such example is `AIModule` that you must add to the module’s _\*.build.cs_ file in which you wish to use it before being able to access any of the AI classes it contains.  
 默认情况下，并非每个模块都加载。使用 C++ 编程时，有时需要包含其他模块才能访问其代码。一个这样的例子是 AIModule，你必须将其添加到你希望使用它的模块的 \*.build.cs 文件中，然后才能访问它包含的任何 AI 类。
@@ -923,20 +924,21 @@ Ari from Epic Games has a great talk on Modules that I recommend checking out an
 
 Why use modules?  
 为什么使用模块？
----------------------------
 
-*   Better code practices/encapsulation of functionality  
-    更好的代码实践/功能封装
-*   Re-use code easily between projects  
-    在项目之间轻松重用代码
-*   Only ship modules you use (eg. trim out Editor-only functionality and unused Unreal features)  
-    仅提供你使用的模块（例如，删减仅限编辑器的功能和未使用的 Unreal 功能）
-*   Faster compilation and linking times  
-    更快的编译和链接时间
-*   Better control of what gets loaded and when.  
-    更好地控制加载的内容和时间。
+---
 
-## Garbage Collection (Memory Management)  垃圾回收 （内存管理）
+- Better code practices/encapsulation of functionality  
+  更好的代码实践/功能封装
+- Re-use code easily between projects  
+  在项目之间轻松重用代码
+- Only ship modules you use (eg. trim out Editor-only functionality and unused Unreal features)  
+  仅提供你使用的模块（例如，删减仅限编辑器的功能和未使用的 Unreal 功能）
+- Faster compilation and linking times  
+  更快的编译和链接时间
+- Better control of what gets loaded and when.  
+  更好地控制加载的内容和时间。
+
+## Garbage Collection (Memory Management) 垃圾回收 （内存管理）
 
 Unreal Engine has a built-in [garbage collection](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/ProgrammingWithCPP/UnrealArchitecture/Objects/Optimizations/#garbagecollection) that greatly reduces our need to manually manage object lifetime. You’ll still need to take some steps to ensure this goes smoothly, but it’s easier than you’d think. Garbage collection occurs every 60 seconds by default and will clean up all unreferenced objects.  
 Unreal Engine 具有内置的垃圾回收功能，可大大减少我们手动管理对象生命周期的需要。您仍然需要采取一些步骤来确保这一切顺利进行，但这比您想象的要容易。默认情况下，垃圾回收每 60 秒进行一次，并将清理所有未引用的对象。
@@ -950,7 +952,7 @@ GC 可能需要一些时间才能启动并实际删除内存/对象。在使用 
 It’s important to be mindful of how many objects you are creating and deleting at runtime as Garbage Collection can easily eat up a large chunk of your frame time and cause stuttering during gameplay. There are concepts such as Object Pooling to consider.  
 请务必注意在运行时创建和删除的对象数量，因为垃圾回收很容易占用大量帧时间，并导致游戏过程中卡顿。需要考虑对象池等概念。
 
-## Automatic Updating of References (Actors & ActorComponents)  自动更新引用（Actor & ActorComponents）
+## Automatic Updating of References (Actors & ActorComponents) 自动更新引用（Actor & ActorComponents）
 
 References to Actors (and ActorComponents) can be automatically _nulled_ after they get destroyed. For this to work you must mark the pointer with `UPROPERTY()` so it can be tracked properly.  
 对 Actor（和 ActorComponents）的引用在销毁后可以自动为空。为此，您必须使用 UPROPERTY（） 标记指针，以便可以正确跟踪它。
@@ -976,7 +978,7 @@ In UE5 the behavior for automatically clearing RawPtrs / ObjectPtrs will change.
 I will update this post once the new behavior has been enabled by default.  
 默认情况下启用新行为后，我将更新此帖子。
 
-## TWeakObjPtr (UObjects)  
+## TWeakObjPtr (UObjects)
 
 _Weak Object Pointer_. This is similar to pointers like `UObject*`, except that we tell the engine that we don’t want to hold onto the memory or object if we are the last piece of code referencing it. UObjects are automatically destroyed and garbage collected when no code is holding a (hard) reference to it. Use weak object pointers carefully to ensure objects are GC’ed when needed.  
 弱对象指针。这与 UObject\* 等指针类似，不同之处在于，如果我们是引用内存或对象的最后一段代码，我们会告诉引擎，我们不想保留内存或对象。当没有代码持有对它的（硬）引用时，UObjects 会自动销毁并进行垃圾回收。请谨慎使用弱对象指针，以确保在需要时对对象进行 GC。
@@ -996,14 +998,14 @@ Now we don’t try to hold onto the object explicitly and it can be garbage coll
     }
 ```
 
-*   [Documentation on WeakObjPtr  
-    WeakObjPtr 上的文档](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/SmartPointerLibrary/WeakPointer/index.html)
-*   [Soft & Weak Object Pointers (Ari Arnbjörnsson)  
-    软弱物体指针 （Ari Arnbjörnsson）](https://www.notion.so/Soft-Weak-Pointers-2347eefb694b49fb8314fdd71ca83065#e499f9b4c5694bfdb8c9148039205590)
-*   [Even more technical, on Smart Pointers in Unreal  
-    更技术性的是，在 Unreal 中的智能指针上](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/SmartPointerLibrary/index.html)
+- [Documentation on WeakObjPtr  
+  WeakObjPtr 上的文档](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/SmartPointerLibrary/WeakPointer/index.html)
+- [Soft & Weak Object Pointers (Ari Arnbjörnsson)  
+  软弱物体指针 （Ari Arnbjörnsson）](https://www.notion.so/Soft-Weak-Pointers-2347eefb694b49fb8314fdd71ca83065#e499f9b4c5694bfdb8c9148039205590)
+- [Even more technical, on Smart Pointers in Unreal  
+  更技术性的是，在 Unreal 中的智能指针上](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/SmartPointerLibrary/index.html)
 
-## Class Default Object  类默认对象
+## Class Default Object 类默认对象
 
 _Class Default Object_ is the default instance of a class in Unreal Engine. This instance is automatically created and used to quickly instantiate new instances. You can use this CDO in other ways too to avoid having to manually create and maintain an instance.  
 Class Default Object （类默认对象） 是 Unreal Engine 中类的默认实例。此实例是自动创建的，用于快速实例化新实例。您也可以以其他方式使用此 CDO，以避免手动创建和维护实例。
@@ -1016,14 +1018,14 @@ Below is one example from [SaveGameSubsystem](https://github.com/tomlooman/Actio
 
 ```cpp
     // Example from: SSaveGameSubsystem.cpp (in Initialize())
-    
+
     const USSaveGameSettings* Settings = GetDefault<USSaveGameSettings>();
-    
+
     // Access default value from class
     CurrentSlotName = Settings->SaveSlotName;
 ```
 
-## Asserts (Debugging)  断言 （调试）
+## Asserts (Debugging) 断言 （调试）
 
 If you really need to be sure if something is not _Null_ or a specific (if-)statement is _true_ and want the code to tell you if it isn’t, then you can use [Asserts](https://docs.unrealengine.com/latest/INT/Programming/Assertions/). Asserts are great as additional checks in code where if it were to silently fail, code later down the line may fail too (which may then take a while to debug and find the origin).  
 如果你真的需要确定某项内容是否为 Null 或特定 （if-） 语句是否为 true，并希望代码告诉你它是否为 true，那么你可以使用 Asserts。断言非常适合作为代码中的附加检查，如果它静默失败，稍后的代码也可能失败（这可能需要一段时间来调试和找到来源）。
@@ -1034,7 +1036,7 @@ Two main assertion types are _check_ and _ensure_.
 ```cpp
     check(MyValue == 1); // treated as fatal error if statement is 'false'
     check(MyActorPointer);
-    
+
     // convenient to break here when the pointer is nullptr we should investigate immediately
     if (ensure(MyActorPointer)) // non-fatal, execution is allowed to continue, useful to encapsulate in if-statements
     {
@@ -1050,7 +1052,7 @@ It’s good to know that Asserts are compiled out of shipping builds by default 
 By adding these asserts you are immediately notified of the (coding) error. One tip I would give here is to only use it for potential coder mistakes and perhaps don’t use it when a piece of content isn’t assigned by a designer (having them run into asserts isn’t as useful as to them it will look like a crash (unless they have an IDE attached) or stall the editor for a bit (as a minidump is created) and not provide a valuable piece of information). For them might be better of using logs and prints on the screen to tell them what they did not set up properly. I sometimes still add in asserts for content mistakes as this is very useful in solo or small team projects.  
 通过添加这些断言，您会立即收到 （编码） 错误的通知。我在这里给出的一个提示是，仅将其用于潜在的编码人员错误，并且当设计人员未分配一段内容时，可能不要使用它（让它们遇到断言并不像它们有用，它看起来像崩溃（除非它们附加了 IDE）或使编辑器停滞一段时间（因为创建了小型转储）并且不会提供有价值的信息）。对他们来说，最好在屏幕上使用日志和打印来告诉他们他们没有正确设置什么。我有时仍然会为内容错误添加断言，因为这在个人或小型团队项目中非常有用。
 
-## Core Redirects  核心重定向
+## Core Redirects 核心重定向
 
 [Core Redirects](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/ProgrammingWithCPP/Assets/CoreRedirects/) are a refactoring tool. They let you redirect pretty much any class, function, name, etc. after your C++ has changed via the configuration files (.ini). This can be incredibly helpful in reducing the massive headache of updating your Blueprints after a C++ change.  
 Core Redirects 是一种重构工具。它们允许你在通过配置文件 （.ini） 更改 C++ 后重定向几乎任何类、函数、名称等。这对于减少在 C++ 更改后更新蓝图的巨大麻烦非常有帮助。
@@ -1058,7 +1060,7 @@ Core Redirects 是一种重构工具。它们允许你在通过配置文件 （.
 The official documentation (above) does a pretty good job of explaining how to set this up. It’s one of those things that’s good to know before you need it. Modern IDEs with proper Unreal Engine support such as JetBrains Rider even have support for creating redirects when you refactor your Blueprint exposed code.  
 官方文档（上面）很好地解释了如何设置。这是在您需要之前了解它的好处之一。具有适当 Unreal Engine 支持的现代 IDE（例如 JetBrains Rider）甚至支持在重构蓝图公开代码时创建重定向。
 
-## Closing  关闭
+## Closing 关闭
 
 I hope this article provided you with some new insight into C++ and how it’s used in Unreal Engine.  
 我希望本文能为您提供一些关于 C++ 及其在 Unreal Engine 中的使用的新见解。
@@ -1069,46 +1071,46 @@ Please comment below if you’d like to see anything else you struggled with whe
 As always, don’t forget to [follow me on Twitter](https://twitter.com/t_looman) for more Unreal Engine tutorials!  
 与往常一样，别忘了在 Twitter 上关注我，获取更多虚幻引擎教程！
 
-## On The Horizon…  在地平线上...
+## On The Horizon… 在地平线上...
 
 Things that didn’t quite make it in yet or require a more detailed explanation in the current sections. Leave your suggestions in the comments!  
 尚未完全包含在其中或需要在当前部分中更详细解释的内容。在评论中留下您的建议！
 
-*   Unreal Header Tool / Unreal Build Tool (”Unreal Build System”)  
-    Unreal Header Tool / Unreal Build Tool （“Unreal Build System”）
-*   Project Structure (Game, Engine, build.cs, Target, binaries, .uproject)  
-    项目结构（游戏、引擎、build.cs、目标、二进制文件、.uproject）
-*   Including other classes (and how to find their path)  
-    包括其他类（以及如何找到它们的路径）
-*   Hot Reloading & Live Coding in UE5.0  
-    UE5.0中的热重载和实时编码
-*   IDE recommendations and setup  
-    IDE 建议和设置
-*   Timers, Async actions (Latent), Multi-threading  
-    计时器、异步操作 （Latent）、多线程
-*   Game Class Hierarchy and most commonly used classes (primer).  
-    Game Class Hierarchy 和最常用的类 （Primer）。
-*   virtual/override keywords. (”Virtual Functions and Polymorphism”)  
-    virtual/override 关键字。（“虚函数和多态性”）
-*   ‘const’ keyword & const correctness  
-    'const' 关键字 & const 正确性
-*   Operator Overloading (examples of where Unreal has done so, eg. with FString when used with logging)  
-    运算符重载（Unreal 执行此操作的示例，例如，与日志记录一起使用时使用 FString）
+- Unreal Header Tool / Unreal Build Tool (”Unreal Build System”)  
+  Unreal Header Tool / Unreal Build Tool （“Unreal Build System”）
+- Project Structure (Game, Engine, build.cs, Target, binaries, .uproject)  
+  项目结构（游戏、引擎、build.cs、目标、二进制文件、.uproject）
+- Including other classes (and how to find their path)  
+  包括其他类（以及如何找到它们的路径）
+- Hot Reloading & Live Coding in UE5.0  
+  UE5.0中的热重载和实时编码
+- IDE recommendations and setup  
+  IDE 建议和设置
+- Timers, Async actions (Latent), Multi-threading  
+  计时器、异步操作 （Latent）、多线程
+- Game Class Hierarchy and most commonly used classes (primer).  
+  Game Class Hierarchy 和最常用的类 （Primer）。
+- virtual/override keywords. (”Virtual Functions and Polymorphism”)  
+  virtual/override 关键字。（“虚函数和多态性”）
+- ‘const’ keyword & const correctness  
+  'const' 关键字 & const 正确性
+- Operator Overloading (examples of where Unreal has done so, eg. with FString when used with logging)  
+  运算符重载（Unreal 执行此操作的示例，例如，与日志记录一起使用时使用 FString）
 
-## References & Further Reading  参考资料和进一步阅读
------------------------------------------
+## References & Further Reading 参考资料和进一步阅读
 
-*   [Laura’s C++ Speedrun  
-    Laura 的 C++ 速通](https://landelare.github.io/2023/01/07/cpp-speedrun.html)
-*   [Why C++ In Unreal Engine Isn’t That Scary?  
-    为什么虚幻引擎中的 C++ 不是很可怕吗？](https://dev.epicgames.com/community/learning/tutorials/Ml0p/why-c-in-unreal-engine-isn-t-that-scary)
-*   [Gameplay Framework Primer](https://www.tomlooman.com/ue4-gameplay-framework/)
-*   [Introduction to Unreal C++ Programming (External)  
-    Unreal C++ 编程简介（外部）](https://docs.unrealengine.com/en-us/Programming/Introduction)
-*   [Gameplay Framework Documentation (External)  
-    Gameplay Framework 文档（外部）](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/Reference/Classes/index.html)
-*   [Gameplay Programming Documentation (External)  
-    Gameplay 编程文档（外部）](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/index.html)
+---
 
-----------------------------
+- [Laura’s C++ Speedrun  
+  Laura 的 C++ 速通](https://landelare.github.io/2023/01/07/cpp-speedrun.html)
+- [Why C++ In Unreal Engine Isn’t That Scary?  
+  为什么虚幻引擎中的 C++ 不是很可怕吗？](https://dev.epicgames.com/community/learning/tutorials/Ml0p/why-c-in-unreal-engine-isn-t-that-scary)
+- [Gameplay Framework Primer](https://www.tomlooman.com/ue4-gameplay-framework/)
+- [Introduction to Unreal C++ Programming (External)  
+  Unreal C++ 编程简介（外部）](https://docs.unrealengine.com/en-us/Programming/Introduction)
+- [Gameplay Framework Documentation (External)  
+  Gameplay Framework 文档（外部）](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/Reference/Classes/index.html)
+- [Gameplay Programming Documentation (External)  
+  Gameplay 编程文档（外部）](https://docs.unrealengine.com/latest/INT/Programming/UnrealArchitecture/index.html)
 
+---

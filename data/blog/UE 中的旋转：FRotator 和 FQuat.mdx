@@ -4,31 +4,36 @@ date: 2025-02-16
 lastmod: 2025-02-16
 tags: ['UE', 'C++']
 draft: false
-summary: " UE 中的旋转：FRotator 和 FQuat"
-images: 
+summary: ' UE 中的旋转：FRotator 和 FQuat'
+images:
 authors:
   - default
 layout: PostLayout
 canonicalUrl:
 ---
+
 FRotator 和 FQuat 是 Unreal Engine 中用于表示旋转的两种不同的数据结构，它们各自有不同的特性和用法。
 
 ## FRotator
 
 **定义与结构**  
 FRotator 是一种使用欧拉角表示旋转的结构，包含三个分量：
+
 - **Pitch**（俯仰角）：绕 Y 轴旋转。
 - **Yaw**（偏航角）：绕 Z 轴旋转。
 - **Roll**（滚转角）：绕 X 轴旋转。
 
 FRotator 的构造函数示例：
+
 ```cpp
 FRotator rotator(0, 10, 0); // 绕 Z 轴旋转 10 度
 ```
+
 这种方式直观易懂，但在某些情况下可能会导致万向节锁（gimbal lock）问题，即在某些旋转组合下，失去一个自由度。
 
 **转换与应用**  
 FRotator 可以轻松地与其他类型的旋转表示进行转换，例如转换为四元数：
+
 ```cpp
 FQuat MyQuat = MyRotator.Quaternion();
 ```
@@ -39,18 +44,23 @@ FQuat MyQuat = MyRotator.Quaternion();
 FQuat 是基于四元数的旋转表示，四元数是一种更复杂的数学结构，通常由一个单位向量和一个旋转角度组成。它不使用度数，而是通过四个分量（x, y, z, w）来表示旋转。
 
 四元数的构造示例：
+
 ```cpp
 FQuat quat = FQuat(FVector(0, 0, 1), PI / 4.f); // 绕 Z 轴旋转 45 度
 ```
+
 FQuat 的优点在于它不会受到万向节锁的影响，并且在插值和平滑旋转时表现更好。
 
 **转换与应用**  
 FQuat 可以通过欧拉角创建：
+
 ```cpp
 FVector vec = FVector(0, 0, 45);
 FQuat quat = FQuat::MakeFromEuler(vec);
 ```
+
 同样，FQuat 可以转换回 FRotator：
+
 ```cpp
 FRotator MyRotator(MyQuat); // 使用 FRotator 的构造函数
 ```

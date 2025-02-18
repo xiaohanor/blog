@@ -37,7 +37,7 @@ export default function TableOfContents({ toc }: TOCProps) {
 
   return (
     <div className="hidden xl:block">
-      <div className="fixed top-24 right-8 z-50 w-64">
+      <div className="fixed right-8 top-24 z-50 w-64">
         <Disclosure defaultOpen={true}>
           {({ open }) => (
             <>
@@ -103,4 +103,4 @@ export default function TableOfContents({ toc }: TOCProps) {
       </div>
     </div>
   )
-} 
+}
