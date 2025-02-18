@@ -58,3 +58,26 @@ input:-webkit-autofill:focus {
   display: inline-block;
   vertical-align: middle;
 }
+
+/* Add this to your existing CSS */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Add styles for the TOC scrollbar */
+.overflow-auto::-webkit-scrollbar {
+  width: 4px;
+}
+
+.overflow-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-auto::-webkit-scrollbar-thumb {
+  background: theme('colors.gray.300');
+  border-radius: 2px;
+}
+
+.dark .overflow-auto::-webkit-scrollbar-thumb {
+  background: theme('colors.gray.600');
+}
