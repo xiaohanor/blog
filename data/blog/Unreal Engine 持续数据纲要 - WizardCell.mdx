@@ -1,0 +1,1807 @@
+---
+title: Unreal Engine 持续数据纲要 - WizardCell
+date: 2025-03-18
+lastmod: 2025-03-18
+tags: ['UE', 'C++', '教程']
+draft: false
+summary: ' Unreal Engine 跨关卡和断开连接时如何持久化数据'
+images:
+authors:
+  - default
+layout: PostLayout
+canonicalUrl:
+---
+
+> 原文：[Unreal Engine Persistent Data Compendium - WizardCell](https://wizardcell.com/unreal/persistent-data/)
+
+我猜你已经在你的游戏里至少有两个关卡了，玩家们在其中一个关卡和另一个关卡之间转移。当玩家进入新关卡时，他们发现他们在旧关卡中拥有的数据已经简单地消失了。在其他情况下，由于一些恶劣的网络条件，玩家可能会与服务器断开连接并重新连接，如果处理不当，也会导致数据丢失！
+
+## 简介
+
+在这篇文章中，我们将讨论虚幻引擎中的 **转移(travel)** 和 **断开连接(disconnect)**（实际上是一个未初始化的转移）场景。更重要的是，我们将探索几种方法使我们的数据在这些场景中持续存在。此外，我们将了解这些方法彼此之间的区别，以及在什么情况下我们应该选择其中一种。
+
+## 转移：无缝 vs. 硬
+
+在虚幻引擎中，有两种主要的转移方式：**无缝**和**非无缝**，后者也被称为**硬**转移。主要区别在于，**无缝**转移是一个非阻塞操作，因为它使用了异步关卡加载，而**非无缝**转移则是一个阻塞调用，因为它使用了同步关卡加载。此外，在**非无缝**转移中，玩家会与服务器断开连接并在新的地图同步加载时重新连接，而在**无缝**转移中，玩家保持连接但会被转移到一个异步加载的[过渡地图](https://wizardcell.com/unreal/persistent-data/#enabling-seamless-travel-and-transition-map)，直到目标关卡也异步加载完毕。
+
+**无缝**转移应该在可能的情况下优先于**非无缝**转移，因为它通常能带来更流畅的体验，并避免客户端重新连接时出现的一些其他问题。
+
+**非无缝**转移必须在三种情况下发生：
+
+- 首次加载地图时
+- 作为客户端首次连接到服务器时（例如加入会话）
+- 当你想要结束一个多人游戏并开始一个新的游戏时
+
+**注意：** 第一种方式并不意味着每次首次加载新地图，而是指最初连接加载的第一张地图。否则，这意味着，我们转移到的任何新地图最终都会变成**非无缝**转移，这是不正确的。
+
+### 转移类型
+
+既然我们了解了虚幻引擎中的转移方式，那么让我们来理解转移类型，可以在这个枚举类中看到：
+
+EngineBaseTypes.h
+
+```c++
+// 从服务器到服务器的转移。
+UENUM()
+enum ETravelType
+{
+    /** 绝对 URL。 */
+    TRAVEL_Absolute,
+    /** 部分（携带名称，重置服务器）。 */
+    TRAVEL_Partial,
+    /** 相对 URL。 */
+    TRAVEL_Relative,
+    TRAVEL_MAX,
+};
+```
+
+让我们解释一下每种转移类型及其预期用途：
+
+- **TRAVEL_Relative**（相同服务器，并保留最后一个 [选项字符串](https://wizardcell.com/unreal/persistent-data/#7-game-options-string)）：当前 [URL](https://wizardcell.com/unreal/persistent-data/#url-structure) 相对于上一个 URL，因此我们不会与服务器断开连接，这使得它非常适合**无缝**转移。因此，当客户端进行**无缝**转移时，这种转移类型是必需的。最后一个选项字符串会带到新关卡。
+- **TRAVEL_Partial**（服务器重置，但保留最后一个选项字符串）：当前 URL 部分匹配上一个 URL，因此我们与服务器断开连接，这对应于**非无缝**转移。最后一个选项字符串会被带到新地图。
+- **TRAVEL_Absolute**（服务器重置，并忽略最后一个选项字符串）：当前 URL 是绝对的，这意味着最后一个 URL（包括最后一个选项字符串）被清除，因此我们与服务器断开连接，这对应于**非无缝**转移。
+
+下面是一个总结表，显示了每种转移类型保留的内容（最后一个服务器 URL 和最后一个选项字符串），以及是否与**无缝**和**硬**转移兼容：
+
+| 转移类型 | 保留最后一个服务器 URL？ | 保留最后一个选项字符串？ | 支持无缝转移？ | 支持硬转移？ |
+| -------- | ------------------------ | ------------------------ | -------------- | ------------ |
+| 相对     | ✔️                       | ✔️                       | ✔️             | ✔️           |
+| 部分     |                          | ✔️                       |                | ✔️           |
+| 绝对     |                          |                          |                | ✔️           |
+
+### 原生转移函数
+
+有三个主要的原生函数驱动转移：`UEngine::Browse()`、`UWorld::ServerTravel()` 和 `APlayerController::ClientTravel()`。在使用哪个函数时可能会有点困惑，因此这里有一些应该有帮助的指南：
+
+#### UEngine::Browse
+
+- 就像加载新地图时的硬重置。
+- 将始终导致非无缝转移。
+- 将在转移到目标地图之前导致服务器断开当前客户端的连接。
+- 客户端将与当前服务器断开连接。
+- 专用服务器无法转移到其他服务器，因此地图必须是本地的（不能是 URL）。
+
+#### UWorld::ServerTravel
+
+- 仅用于服务器。
+- 将服务器跳到新的世界/关卡。
+- 所有连接的客户端都将跟随。
+- 这是多人游戏从地图到地图转移的方式，服务器是负责调用此函数的。
+- 服务器将为所有已连接的客户端玩家调用 `APlayerController::ClientTravel()`。
+
+#### APlayerController::ClientTravel
+
+- 如果从客户端调用，将转移到新的服务器。
+- 如果从服务器调用，将指示特定客户端转移到新地图（但保持连接到当前服务器）。
+
+### 蓝图转移函数
+
+在**蓝图**中，驱动转移的两个函数/节点是：
+
+#### OpenLevel
+
+- 此函数将始终导致**硬**转移（即使**无缝**转移已[启用](https://wizardcell.com/unreal/persistent-data/#enabling-seamless-travel-and-transition-map)。如果从客户端调用，将转移到新的服务器，而不会断开其他客户端与服务器的连接。如果从监听服务器调用，将使监听服务器玩家转移到新地图，将客户端断开连接到入口/默认地图。如果从专用服务器调用，将导致转移失败，将客户端断开连接到默认地图，除非转移 URL 具有选项“listen”，这将指示特定客户端转移到新地图作为监听服务器，但是，其他客户端将断开连接回到默认地图。它对应于原生函数 `UGameplayStatics::OpenLevel()`，它调用 `UEngine::SetClientTravel()`。在下一个 tick 上，`UGameEngine::Tick()` 调用 `UEngine::Browse()`，它调用 `UEngine::LoadMap()`。默认情况下 `bAbsolute = true`，使其成为**绝对**转移，否则，是**相对**转移。
+
+**注意：** 应该避免在 PIE 中测试转移（以及更多网络功能），因为这可能会导致你的编辑器崩溃，并且不会反映你的代码在实时中的功能。坚持在独立/打包游戏中转移！
+
+#### ExecuteConsoleCommand
+
+- 此函数和 `Command` 参数可以是 `ServerTravel <MapName>` 或 `Travel <MapName>`（前者通常使用，因为它可以是**无缝**的，而后者不行），它们将转移到指定的地图，并传递先前设置的选项字符串，因为它们分别是**相对**和**部分**转移。它们分别对应于原生函数：`UEngine::HandleServerTravelCommand()` 和 `UEngine::HandleTravelCommand()`。你可以使用的另一个命令是 `Open <MapName>`，它会打开指定的地图，而不会传递先前设置的选项字符串，因为它是一个**绝对**转移。它对应于原生函数 `UEngine::HandleOpenCommand()`，该函数调用 `UEngine::SetClientTravel()`。在下一个 tick 上，`UGameEngine::Tick()` 调用 `UEngine::Browse()`，它调用 `UEngine::LoadMap()`。它始终是一个**绝对**转移。
+
+幸运的是，当运行时在**控制台命令**中键入这些命令时，它们会自动完成：
+
+BaseInput.ini
+
+```bash
++ManualAutoCompleteList=(Command="Open",Desc="<MapName> 打开指定的地图，不传递先前设置的选项")
++ManualAutoCompleteList=(Command="Travel",Desc="<MapName> 转移到指定的地图，传递先前设置的选项")
++ManualAutoCompleteList=(Command="ServerTravel",Desc="<MapName> 转移到指定的地图并带上客户端，传递先前设置的选项")
+```
+
+**注意：** 控制台命令不区分大小写，因此可以根据需要编写：所有大写/小写字母、PascalCase、camelCase 等。
+
+### 启用无缝转移和过渡地图
+
+要启用无缝转移，你需要设置一个过渡地图。这通过 `UGameMapsSettings.TransitionMap` 属性进行配置。默认情况下，此属性为空，如果你的游戏保留此属性为空，将为过渡地图创建一个空地图。
+
+过渡地图存在的原因是，必须始终加载一个世界（它保存地图），因此我们不能在加载新地图之前释放旧地图。由于地图可能非常大，同时在内存中保存旧地图和新地图是一个坏主意，所以过渡地图就派上用场了。
+
+因此，现在我们可以从当前地图转移到过渡地图，然后从那里转移到最终地图。由于过渡地图非常小，它不会增加太多额外的开销，因为它与当前地图和最终地图重叠。
+
+设置好过渡地图后，将 `AGameModeBase.bUseSeamlessTravel` 设置为 true，然后无缝转移应该就可以工作了。
+
+**注意：** 5.1 之前，单进程 PIE（编辑器内游玩）中不支持无缝转移。因此，你必须关闭 [`Run Under One Process`](https://docs.unrealengine.com/en-US/BuildingWorlds/LevelEditor/InEditorTesting/NetworkedPlayInEditor/#advancedsettings) 设置，或启动一个独立游戏（右键单击你的 .uproject 并 `Launch game`），或启动一个打包构建。自 5.1 以来，单进程 PIE 中支持无缝转移，但你需要启用[CVar](https://docs.unrealengine.com/en-US/console-varaibles-cplusplus-in-unreal-engine/) `net.AllowPIESeamlessTravel`，从控制台命令，因为默认情况下它是禁用的。
+
+## [GameFramework](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Framework/) 对象
+
+了解 [虚幻引擎游戏框架对象](https://www.tomlooman.com/unreal-engine-gameplay-framework/)、它们的创建顺序、调用和空间是非常重要的。这将帮助我们解决一系列问题，这些问题不一定只与持久化数据相关。
+
+> **提示：** 从现在开始，你将经常看到 `AGameMode(Base)`，这是我表示 `AGameModeBase` 或 `AGameMode` 的方式，具体取决于你继承哪个。一般来说，你应该优先选择 `AGameMode`，因为它支持更多的功能：比赛状态、掉线记录、**PlayerController** 及其依赖的**Actors**的真正持久性等。
+
+### GameFramework 对象创建顺序和调用
+
+大多数情况下，当我们从一个关卡转移到另一个关卡（无论是什么类型），或者当我们断开连接并重新连接时，**对象**会被**销毁**和**重新创建**（不包括**GameInstance**和**GameViewportClient**，它们在游戏开始时创建并且在游戏关闭之前永远不会被销毁），按以下顺序：
+
+1.  **GameInstance：** 在**独立**模式下，它在游戏开始时在 `UGameEngine::Init()` 中创建，在**PIE**模式下，它为每个 PIE 实例在 `UEditorEngine::CreateInnerProcessPIEGameInstance()` 中创建。相同的**GameInstance**会被设置为在新加载的关卡中使用，在 `UEngine::LoadMap()` 内部。
+2.  **GameMode：** 由**GameInstance**在服务器加载地图时在 `UGameInstance::CreateGameModeForURL()` 中创建，由 `UWorld::SetGameMode()` 调用，由 `UEngine::LoadMap()` 调用。
+3.  **GameSession：** 由**GameMode**在 `AGameModeBase::InitGame()` 中创建。
+4.  **GameState：** 由**GameMode**在 `AGameModeBase::PreInitializeComponents()` 中创建。
+5.  **GameNetworkManager：** 由**GameMode**在 `AGameModeBase::PreInitializeComponents()` 中创建。
+6.  **PlayerController：** 由**GameMode**创建，要么在 `AGameModeBase::SpawnPlayerController()` 中[成功登录](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Networking/Server/#connectionprocess)后，由 `AGameModeBase::Login()` 调用，由 `UWorld::SpawnPlayActor()` 在**硬**转移的情况下调用。然而，在**无缝**转移的情况下：如果新的**GameMode**的类是 `AGameMode` 的一个**子类**，并且它的**PlayerController**类与之前**相同**，那么保留相同的旧**PlayerController**，并且不创建任何新的。否则，它们是**不同**的类，它是在 `AGameMode(Base)::HandleSeamlessTravelPlayer()` 中创建的。
+7.  **SpectatorPawn：** 由**PlayerController**在 `APlayerController::SpawnSpectatorPawn()` 中创建，由 `APlayerController::BeginSpectatingState()` 调用，它要么由 `APlayerController::ReceivedPlayer()` 调用，由 `APlayerController::SetPlayer()` 调用，由 `UWorld::SpawnPlayActor()` 在**硬**转移的情况下调用，要么由 `APlayerController::ChangeState()` 调用，由 `AGameMode(Base)::InitSeamlessTravelPlayer()` 调用，由 `AGameMode(Base)::HandleSeamlessTravelPlayer()` 在**无缝**转移的情况下调用。在**无缝**转移中，如果新的**GameMode**的**PlayerController**类与之前的类**不同**，则会调用 `APlayerController::ChangeState()`。  
+    它在 `APlayerController::DestroySpectatorPawn()` 中被销毁（一旦拥有**Pawn**），由 `APlayerController::ChangeState()` 调用，由 `APlayerController::OnPossess()` 调用，由 `AController::Possess()` 调用，由 `AGameModeBase::FinishRestartPlayer()` 调用。
+8.  **PlayerState：** 由**PlayerController**在 `AController::InitPlayerState()` 中创建，在玩家的情况下由 `APlayerController::PostInitializeComponents()` 调用，由**AIController**在 `AController::InitPlayerState()` 中创建，由 `AAIController::PostInitializeComponents()` 调用。
+9.  **PlayerCameraManager：** 由**PlayerController**在 `APlayerController::SpawnPlayerCameraManager()` 中创建，由 `APlayerController::PostInitializeComponents()` 调用，要么在**硬**转移的情况下，要么在**无缝**转移的情况下且新的**GameMode**的**PlayerController**类与之前的类**不同**。否则，在**无缝**转移的情况下且它们是**相同**的类：如果玩家是客户端或监听服务器，则保留相同的旧**PlayerCameraManager**，并且不创建任何新的。但是，对于专用服务器，它是在 `APlayerController::PostSeamlessTravel()` 中创建的。
+10. **CheatManager：** 由**PlayerController**在 `APlayerController::AddCheats()` 中创建，要么在 PIE/单人游戏的情况下由 `APlayerController::PostInitializeComponents()` 调用，要么在除发布版本之外的任何其他情况下由 `EnableCheats()` 调用。
+11. **HUD：** 由**PlayerController**在 `APlayerController::ClientSetHUD()` 中创建，由 `AGameModeBase::InitializeHUDForPlayer()` 调用，由 `AGameModeBase::GenericPlayerInitialization()` 调用，该函数对**无缝**和**硬**转移都适用。在**无缝**转移的情况下，如果新的**GameMode**的类是 `AGameMode` 的一个**子类**，并且它的**PlayerController**类与之前的**相同**，旧的**HUD**在 `APlayerController::ClientSetHUD()` 中将是有效的，并且在新**HUD**被创建之前将被销毁（我们将[在下面看到](https://wizardcell.com/unreal/persistent-data/#persistent-hud-example)如何处理从旧实例复制数据到新实例，甚至使其真正持久化）。
+12. **Pawn：** 由**GameMode**在 `AGameModeBase::RestartPlayer()` 中创建，由 `AGameMode(Base)::HandleStartingNewPlayer()` 调用，由 `AGameMode(Base)::PostLogin()` 在**硬**转移的情况下调用，或由 `AGameMode(Base)::HandleSeamlessTravelPlayer()` 在**无缝**转移的情况下调用。
+13. **AIController：** 由 AI **Pawn** 在 `APawn::SpawnDefaultController()` 中创建，由 `APawn::PostInitializeComponents()` 调用。
+
+> **注意：** 我没有向你提供完整的创建调用堆栈，也没有提供整个**对象**列表，因为那会很疯狂，但我正在阐明有趣的内容。有关更详细的信息，我建议你观看 [Alex Forsythe 的视频](https://youtu.be/IaU2Hue-ApI)。
+
+> **提示：** 使用 `AGameMode(Base)::HandleStartingNewPlayer()` 作为入口函数，因为它无论转移是否无缝都会被调用。
+
+### GameFramework 对象创建空间
+
+**GameMode**、**GameSession**、**GameNetworkManager** 和 **AIController** 仅存在于服务器上。
+
+**GameInstance** 和 **GameState** 存在于服务器和客户端上，尽管前者不被复制，而后者被复制。
+
+**PlayerState** 和 **Pawn** 被复制，存在于服务器和客户端上的每个（自主和模拟）代理上。
+
+**PlayerController** 被复制，存在于服务器上的每个代理上，并且仅存在于拥有客户端（自主代理）上。
+
+**PlayerCameraManager** 存在于服务器上的每个代理上，并且仅存在于拥有客户端上，尽管不被复制。
+
+**SpectatorPawn** 和 **HUD** 仅存在于拥有客户端上。
+
+**CheatManager** 仅存在于服务器上，但如果拥有客户端调用 `APlayerController::EnableCheats()`，则也可以存在于拥有客户端上。
+
+**注意：** 通常，这些**Actor**类在两个不同的地图之间是不同的（源地图和目标地图）；因此，如果我们想要持久化数据，我们需要让这两个子**Actor**类从一个共享的父**Actor**类继承，该父**Actor**类包含共享数据。
+
+## 在无缝转移中持久化数据
+
+事实上，转移会销毁我们的大部分**对象**，这使得持久化运行时数据的过程变得困难。尽管如此，在这种情况下，**无缝**转移可以使持久化数据更容易。
+
+### 无缝转移流程
+
+1.  标记将持久化到过渡关卡的**Actors**（内部非 Actor **对象**也将自动持久化）。
+2.  转移到过渡关卡。
+3.  标记将持久化到最终关卡的**Actors**（内部非 Actor **对象**也将自动持久化）。
+4.  转移到最终关卡。
+
+### 仅在服务器上到过渡地图的持久对象
+
+当我们**无缝**转移时，这些**对象**将默认持久化到过渡地图：
+
+- **GameMode**
+- **GameSession**
+- **GameState**
+- 任何在前面提到的任何**Actors**内部的非 Actor **对象**（即 `Object.Outer == Actor`）
+
+请参阅下面的函数以供参考：
+
+GameModeBase.cpp
+
+```c++
+void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList)
+{
+    // 获取我们即将一次性添加的元素的分配
+    const int32 ActorsToAddCount = GameState->PlayerArray.Num() + (bToTransition ? 3 : 0);
+    ActorList.Reserve(ActorsToAddCount);
+
+    ...
+
+    if (bToTransition) // 如果我们从旧关卡到过渡地图，则为 true，如果从过渡地图到新关卡，则为 false
+    {
+        // 在我们过渡到过渡地图之前保留自己
+        ActorList.Add(this);
+        // 在我们过渡到过渡地图之前保留一般的游戏状态
+        ActorList.Add(GameState);
+        // 在我们过渡到过渡地图之前保留游戏会话状态
+        ActorList.Add(GameSession);
+
+        // 如果在此部分添加，最好增加上面文本的 ActorsToAddCount
+    }
+}
+```
+
+**注意：** 我修复了 if 块内的注释，因为它们最初声明**GameMode**、**GameState**和**GameSession**会持久化到目标地图，这是完全误导的。另外，请注意，[文档](https://docs.unrealengine.com/en-US/InteractiveExperiences/Networking/Travelling/#persistingactorsacrossseamlesstravel) 具有误导性，因为事实上它们还声明**GameMode**会持久化到目标地图，这是不正确的。
+
+#### 它们应该被保留到目标地图吗？
+
+虽然你可以覆盖上面的函数来将这些**Actors**保留到目标地图，但我建议你不要这样做，原因有几个：
+
+1.  没有理由在**GameMode**中持久化运行时数据，因为这个类定义了在编译时设置的游戏规则。
+2.  **GameMode**类通常在两个不同的关卡之间变化，因此保留相同的**Actor**是一个坏主意。
+3.  保留这些类中的一个而不保留其他类就像掉进了兔子洞。例如，保留**GameMode**而不保留**GameState**会导致服务器关闭，因为这两个类是耦合的，你可以在这里看到：
+
+    World.cpp
+
+    ```c++
+    UWorld* FSeamlessTravelHandler::Tick()
+    {
+     ...
+
+     if (KeptGameMode)
+     {
+         LoadedWorld->CopyGameState(KeptGameMode, KeptGameState);
+         bCreateNewGameMode = false;
+     }
+
+     ...
+    }
+    ```
+
+void UWorld::CopyGameState(AGameModeBase*FromGameMode, AGameStateBase* FromGameState)
+{
+AuthorityGameMode = FromGameMode;
+SetGameState(FromGameState);
+}
+
+````
+
+4.  即使我们同时保留**GameMode**和**GameState**，我们的游戏也会冻结，并且无法解冻，除非我们重新连接我们的客户端。
+
+**提示：** 不要使用这些**Actor**类持久化运行时数据：**GameMode**、**GameState**和**GameSession**。
+
+### 在服务器上到目标地图的持久对象
+
+默认情况下，以下**对象**将仅在**服务器**上持久化到目标地图，尽管有时它们会被销毁和重新创建。因此，我们必须将数据（更多内容见下文）复制到新创建的对象上。以下是列表：
+
+*   所有**PlayerStates**
+*   所有具有有效**PlayerState**的**Controllers**（包括使用**PlayerStates**的**AIControllers**）
+*   所有**PlayerControllers**
+*   监听服务器的**HUD**
+*   监听服务器的**PlayerCameraManager**
+*   所有监听服务器的**UserWidgets**
+*   任何通过 `APlayerController::GetSeamlessTravelActorList()` 添加的**Actors**，在监听服务器的**PlayerController**上调用
+*   任何通过 `AGameModeBase::GetSeamlessTravelActorList()` 添加的**Actors**
+*   任何在列表中**Actor**内部的非 Actor **对象**（即列表 `ActorList` 中的 `Object.Outer == Actor`）
+*   任何具有以下内容的**Actors**：`(Role < ROLE_Authority) && (NetDormancy < DORM_DormantAll) && (!IsNetStartupActor())`
+
+**注意：** 只有**PersistentLevel**中（已分配动态 [NetGUID](https://docs.unrealengine.com/en-US/API/Runtime/Core/Misc/FNetworkGUID/) 的）动态**Actors**（包括但不限于在游戏过程中生成的所有**Actors**）才可能持久化。
+
+请参阅下面的函数以供参考：
+
+World.cpp
+
+```c++
+UWorld* FSeamlessTravelHandler::Tick()
+{
+    ...
+
+    // 标记我们想要保留的 actors
+    FUObjectAnnotationSparseBool KeepAnnotation;
+    TArray<AActor*> KeepActors;
+
+    if (AGameModeBase* AuthGameMode = CurrentWorld->GetAuthGameMode())
+    {
+        AuthGameMode->GetSeamlessTravelActorList(!bSwitchedToDefaultMap, KeepActors);
+    }
+
+    const bool bIsClient = (CurrentWorld->GetNetMode() == NM_Client);
+
+    // 始终保留属于玩家的 Controllers
+    if (bIsClient)
+    {
+        ...
+    }
+    else
+    {
+        for( FConstControllerIterator Iterator = CurrentWorld->GetControllerIterator(); Iterator; ++Iterator )
+        {
+            if (AController* Player = Iterator->Get())
+            {
+                if (Player->PlayerState || Cast<APlayerController>(Player) != nullptr)
+                {
+                    KeepAnnotation.Set(Player);
+                }
+            }
+        }
+    }
+
+    // 询问玩家我们应该保留什么
+    for (FLocalPlayerIterator It(GEngine, CurrentWorld); It; ++It)
+    {
+        if (It->PlayerController != nullptr)
+        {
+            It->PlayerController->GetSeamlessTravelActorList(!bSwitchedToDefaultMap, KeepActors);
+        }
+    }
+    // 标记所有有效的 actors
+    for (AActor* KeepActor : KeepActors)
+    {
+        if (KeepActor != nullptr)
+        {
+            KeepAnnotation.Set(KeepActor);
+        }
+    }
+
+    ...
+}
+````
+
+GameModeBase.cpp
+
+```c++
+void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList)
+{
+    // 获取我们即将一次性添加的元素的分配
+    const int32 ActorsToAddCount = GameState->PlayerArray.Num() + (bToTransition ? 3 : 0);
+    ActorList.Reserve(ActorsToAddCount);
+
+    // 始终保留 PlayerStates，以便在我们重启后可以将玩家保留在同一队伍中等
+    ActorList.Append(GameState->PlayerArray);
+
+    ...
+}
+```
+
+PlayerController.cpp
+
+```c++
+void APlayerController::GetSeamlessTravelActorList(bool bToEntry, TArray<AActor*>& ActorList)
+{
+    if (MyHUD != NULL)
+    {
+        ActorList.Add(MyHUD);
+    }
+
+    // 玩家相机是否应该持久化或只是重新创建？ (客户端必须在主机上重新创建)
+    ActorList.Add(PlayerCameraManager);
+}
+```
+
+### 在客户端上到目标地图的持久对象
+
+默认情况下，以下**对象**将仅在**客户端**上持久化到目标地图，尽管有时它们会被销毁和重新创建。因此，我们必须将数据（更多内容见下文）复制到新创建的对象上。以下是列表：
+
+- 本地**PlayerController**
+- **HUD**
+- 本地**PlayerCameraManager**
+- 所有**UserWidgets**
+- 任何通过 `APlayerController::GetSeamlessTravelActorList()` 添加的**Actors**，在本地**PlayerController**上调用
+- 任何在列表中**Actor**内部的非 Actor **对象**（即列表中的 `Object.Outer == Actor`）
+- 任何具有以下内容的**Actors**：`(Role < ROLE_Authority) && (NetDormancy < DORM_DormantAll) && (!IsNetStartupActor())`
+
+**注意：** 只有**PersistentLevel**中的动态**Actors**才可能持久化。
+
+请参阅下面的函数以供参考：
+
+World.cpp
+
+```c++
+UWorld* FSeamlessTravelHandler::Tick()
+{
+    ...
+
+    // 标记我们想要保留的 actors
+    FUObjectAnnotationSparseBool KeepAnnotation;
+    TArray<AActor*> KeepActors;
+
+    const bool bIsClient = (CurrentWorld->GetNetMode() == NM_Client);
+
+    // 始终保留属于玩家的 Controllers
+    if (bIsClient)
+    {
+        for (FLocalPlayerIterator It(GEngine, CurrentWorld); It; ++It)
+        {
+            if (It->PlayerController != nullptr)
+            {
+                KeepAnnotation.Set(It->PlayerController);
+            }
+        }
+    }
+    else
+    {
+        ...
+    }
+
+    // 询问玩家我们应该保留什么
+    for (FLocalPlayerIterator It(GEngine, CurrentWorld); It; ++It)
+    {
+        if (It->PlayerController != nullptr)
+        {
+            It->PlayerController->GetSeamlessTravelActorList(!bSwitchedToDefaultMap, KeepActors);
+        }
+    }
+    // 标记所有有效的 actors
+    for (AActor* KeepActor : KeepActors)
+    {
+        if (KeepActor != nullptr)
+        {
+            KeepAnnotation.Set(KeepActor);
+        }
+    }
+
+    ...
+}
+```
+
+PlayerController.cpp
+
+```c++
+void APlayerController::GetSeamlessTravelActorList(bool bToEntry, TArray<AActor*>& ActorList)
+{
+    if (MyHUD != NULL)
+    {
+        ActorList.Add(MyHUD);
+    }
+
+    // 玩家相机是否应该持久化或只是重新创建？ (客户端必须在主机上重新创建)
+    ActorList.Add(PlayerCameraManager);
+}
+```
+
+### 无缝转移中持久化的非 Actor 对象
+
+> **注意：** 本节仍在进行中，因此你不应该将我的话当真！
+
+如果你仔细观察诸如 `GetSeamlessTravelActorList()` 这样的函数的 [文档](https://wizardcell.com/unreal/persistent-data/#5-getseamlesstravelactorlist)，并且从字里行间阅读，你将很快意识到，除了持久的**Actors**列表之外，还有可能由于以下原因而持久化的非 Actor **对象**：`(即，列表中的 Object.Outer == Actor)`。在另一个上下文中，我注意到 **UserWidgets** 仅持久化**无缝**转移，并且它们通常是外围的**GameInstance**（如果一个不存在，它们是外围的**World**），无论转移类型如何，该**GameInstance**都是持久的。一方面，如果有人碰巧将他们的 `Outer`（通过 `UObject::Rename()`）更改为**Pawn**，例如，默认情况下该**Pawn**不是持久化的，那么它们将不再持久化，另一方面，将他们的 `Outer` 更改为持久**PlayerController**将使它们保持持久化。
+
+这导致了以下理论：
+
+> **在无缝转移时，任何外围到持久对象的非 Actor 对象也将是持久的**。
+
+这种可能情况的一个假设是 `Outer` 持有一个对其内部对象的强/硬引用，防止它们被自动 [GC](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/ProgrammingWithCPP/UnrealArchitecture/Objects/Optimizations/#garbagecollection)（垃圾回收）。虽然事实并非如此，因此内部**对象**的 `Outer` 与该内部对象的生命周期与 GC 视角无关。然而，内部对象持有对其 `Outer` 的强引用，所以只要内部对象还活着，它的 `Outer` 也会保持活着。此规则的一个例外是 **UPackage**。它实际上是被引擎保存和加载的根“事物”，因此没有 `Outer`。外围到该 **Package** 的 **Object** 将与它一起保存，这使得 `Outer` 关系在这种情况下非常重要。
+
+另一个假设是，GC 在**无缝**转移时会忽略外围到持久**对象**的不可达非 Actor **对象**。但我还没有证明这是否属实。
+
+#### 持久 UserWidgets
+
+我们已经提到，默认情况下 **UserWidgets** 通常是外围到 **GameInstance**，这就是它们在**无缝**转移中持久化的原因。话虽如此，看到它们在**硬**转移中的处理方式是非常有趣的。
+
+在**硬**转移期间，会调用 `UEngine::LoadMap()`，并且在某个时刻会广播委托 `FWorldDelegates::LevelRemovedFromWorld`。当**UserWidget**在其上调用了 `UUserWidget::AddToViewport()` 时，它会在内部调用 `UUserWidget::AddToScreen()`，这会将之前的委托绑定到函数 `UUserWidget::OnLevelRemovedFromWorld()`，该函数调用 `UUserWidget::RemoveFromParent()`，如下所示：
+
+UserWidget.h
+
+```c++
+/**
+ * 当一个顶级小部件在视口中并且世界可能要结束时调用。当这种情况发生时，
+ * 在屏幕上保留小部件是不安全的。当发生这种情况时，我们会自动删除它们并将其标记为待销毁。
+ */
+virtual void OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld);
+```
+
+UserWidget.cpp
+
+```c++
+void UUserWidget::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
+{
+    // 如果 InLevel 为空，则表示整个世界即将消失，所以
+    // 立即从视口中删除这个小部件，它可能持有太多
+    // 无法在新世界中携带的危险的 actor 引用。
+    if ( InLevel == nullptr && InWorld == GetWorld() )
+    {
+        RemoveFromParent();
+    }
+}
+```
+
+当一个**UserWidget**被销毁时，它底层的 [**Slate**](https://docs.unrealengine.com/en-US/ProgrammingAndScripting/Slate/InGameUI/) **Widget** 不会自动从视口中删除，因此上面的函数 `OnLevelRemovedFromWorld()` 确保了上述原因。
+
+总而言之，在**硬**转移期间，**UserWidgets** 被销毁，因此它们底层的 Slate **Widget**，而在**无缝**转移期间，它们将正常持久化。
+
+##### UserWidgets 应该持久化无缝转移吗？
+
+在阅读上一节时，你可能问过自己，**UserWidgets** 持久化**无缝**转移是否是一个好习惯，简而言之，答案是否定的。原因是 UI（用户界面）用于显示状态和接受输入。使其在关卡加载后保持该状态会使其成为状态持有者而不是显示者。因此，**UserWidgets** 应该大部分是无状态的（除了**UserWidget**自身需要的视觉效果，例如），即仅镜像其他地方保存的数据，并且作为回报，它们几乎永远不需要持久化。
+
+你可以使用多种选项来防止它们持久化，但这里有两个：
+
+1.  模仿引擎在**硬**转移中的做法：覆盖 `UUserWidget::AddToScreen()`（在自定义的 `UserWidgetBase` 类中，每个**UserWidget**都继承自该类）并侦听委托 `FWorldDelegates::OnSeamlessTravelStart`，该委托调用一个自定义的 `UserWidgetBase::OnSeamlessTravelStart()`，它调用被覆盖的 `UUserWidgetBase::RemoveFromParent()`。
+2.  当它们的小部件管理器**HUD**被销毁时手动删除它们：在你的**HUD**类（很棒的**UserWidgets**管理器）中覆盖 `AActor::Destroyed()`，并迭代你的**UserWidgets** 并明确地在其上调用 `UUserWidget::RemoveFromParent()`。
+
+### 持久对象的含义
+
+我们已经看到几乎所有**对象**，包括一些[那些被提及为持久化](https://wizardcell.com/unreal/persistent-data/#persisting-objects-across-seamless-travel)的对象，在[无缝转移时](https://wizardcell.com/unreal/persistent-data/#gameframework-objects-creation-order-and-calls)会被[销毁和重新创建](https://wizardcell.com/unreal/persistent-data/#gameframework-objects-creation-order-and-calls)。如果是这种情况，那么在前面几节中提到的持久**对象**实际上是如何持久化的？
+
+当发生**无缝**转移时，会有一小段时间，特定的**Object**类的旧实例和新实例都是活动的。在那段时间内，只有你选择从旧实例复制到新实例的数据才真正被保留。因此，旧的**Objects**并没有真正地持久化，而是我们选择保留的数据。但是，情况并非总是如此。例如，**UserWidgets**（以及任何具有持久 `Outer` 的非 Actor **对象**）确实在不需要复制数据的情况下真正持久化。同样适用于诸如**PlayerController**和**PlayerCameraManager**之类的类，但前提是新的**GameMode**的类是 `AGameMode` 的**子类**，并且它的**PlayerController**类与之前的**相同**。我们将在[解释](https://wizardcell.com/unreal/persistent-data/#5-getseamlesstravelactorlist)原因以及如何在幕后完成。更彻底的答案以及如何完成数据保存，可以在下一节中找到。
+
+## 在断开连接时持久化数据
+
+虽然现代互联网允许游戏玩家与世界各地的其他人连接，但互联网有时并不像我们希望的那么稳定。在多人游戏中，断开连接每天都在发生，如果不正确处理，玩家将遭受损失。断开连接然后重新连接[根据定义](https://wizardcell.com/unreal/persistent-data/#travel-seamless-vs-hard)是一个**硬**转移，这意味着我们缺少上面讨论的**无缝**转移持久化数据的优势。幸运的是，虚幻引擎已经内置了功能，可以开箱即用地处理断开连接然后重新连接的玩家的数据保存。要理解所有这些功能如何一起工作，我们首先应该了解引擎如何处理断开连接的玩家。
+
+### 在断开连接时存储数据
+
+以下是断开连接的玩家的调用堆栈（按顺序），直到他的数据被保存：
+
+```c++
+1. APlayerController::Destroyed()
+2. AController::Destroyed()
+3. AGameMode::LogOut()
+4. AGameMode::AddInactivePlayer()
+5. APlayerState::Duplicate()
+6. APlayerState::DispatchCopyProperties()
+7. APlayerState::CopyProperties(), APlayerState::ReceiveCopyProperties() // 原生和蓝图
+```
+
+**注意：** 你的自定义**GameMode**类必须从 `AGameMode` 而不是 `AGameModeBase` 继承，因为后者不支持此类功能。
+
+现在用语言来说，当玩家从游戏服务器断开连接时会发生什么：
+
+1.  他的**Pawn**从**PlayerController**中取消拥有并被销毁，在 `APlayerController::PawnLeavingGame()` 内部。**SpectatorPawn**，**HUD** 和**PlayerCameraManager**也被销毁。
+2.  生成一个新的“副本”**PlayerState**，并且在原生和蓝图 `CopyProperties()` 函数中指定的数据将从旧的原始**PlayerState**复制到新创建的**PlayerState**。覆盖其中一个，并相应地决定要复制什么数据。以下是默认复制的数据：
+    PlayerState.cpp
+    ```c++
+    void APlayerState::CopyProperties(APlayerState* PlayerState)
+    {
+     PlayerState->SetScore(GetScore());
+     PlayerState->SetCompressedPing(GetCompressedPing());
+     PlayerState->ExactPing = ExactPing;
+     PlayerState->SetPlayerId(GetPlayerId());
+     PlayerState->SetUniqueId(GetUniqueId());
+     PlayerState->SetPlayerNameInternal(GetPlayerName());
+     PlayerState->SetStartTime(GetStartTime());
+     PlayerState->SavedNetworkAddress = SavedNetworkAddress;
+    }
+    ```
+
+````
+
+3.  然后，新的副本**PlayerState**被停用（不再复制），并且其生命周期设置为 `AGameMode.InactivePlayerStateLifeSpan`，默认情况下为 300 秒。如果玩家在此之前没有重新连接，他们不活动的存储副本**PlayerState**将被销毁，并且他将无法再次重新连接（因为他的 `UniqueId` 或 `SavedNetworkAddress` 丢失）。将 `InactivePlayerStateLifeSpan` 设置为 0 将清除计时器，并且不会销毁存储的副本**PlayerState**。不活动的**PlayerState**被添加到 `AGameMode.InactivePlayerArray` 中，这是一个属于已从服务器断开连接的玩家的**PlayerStates**数组，因此它们被保存以防它们重新连接。请注意，`AGameMode.MaxInactivePlayers` 确定在淘汰较早的玩家之前断开连接的玩家的最大数量。
+4.  然后，原始**PlayerState**在 `APlayerState::OnDeactivated()` 中被销毁，由 `APlayerController::CleanupPlayerState()` 调用，后者又从 `AGameStateBase.PlayerArray`（所有活动**PlayerStates**的数组）中删除它，在 `APlayerState::Destroyed()` 内部。随后销毁拥有的**PlayerController**。
+
+**注意：** 默认情况下，**PlayerState**被复制的条件之一是断开连接的玩家的 `APlayerState.bOnlySpectator == false`，这意味着他没有作为 [观察者](https://wizardcell.com/unreal/spectating-system/)加入服务器。
+
+考虑到这一切，有两个陷阱，我们将在下一节中介绍。
+
+### 陷阱
+
+**(1)** 感谢我的朋友 [Zlo](https://www.linkedin.com/in/josip-duvancic-933934254/) 对第一个陷阱的见解。引用他：
+
+> 虽然看起来 `APlayerState::CopyProperties()` 是在断开连接时存储任何数据的函数，但事实上并非如此，因为你可能需要提取一些与 pawn 相关的数据，为了在重新连接时正确地恢复它，该函数无法做到这一点。
+>
+> 例如，假设你希望断开连接的 pawns 重新出现在它们断开连接的地方。这需要 **PlayerState** 知道 **Pawn** 的位置，在他断开连接时，它通常做不到。同样适用于你的库存或技能系统，即使你预先将它们放在 **PlayerState** 类中，`CopyProperties()` 仍然是一个问题。
+>
+> 为了使 `CopyProperties()` 起作用，**PlayerState** 必须已经拥有你需要的所有数据，并且出于断开连接的目的，它通常没有。因此，你需要一个在稍后时间点调用的函数。`APlayerState::OnDeactivated()` 就是这样的函数。
+
+PlayerState.h
+
+```c++
+/** 当拥有玩家已断开连接时，在服务器上调用，默认情况下，此方法销毁此玩家状态 */
+virtual void OnDeactivated();
+````
+
+**(2)** 虽然一个**Actor**拥有自己的 [**AbilitySystemComponent**](https://docs.unrealengine.com/5.0/en-US/gameplay-ability-system-component-and-gameplay-attributes-in-unreal-engine/)是很常见的，但有些情况下，你可能希望一个**Actor**（例如玩家的**Pawn**）使用另一个**Actor**（如**PlayerState** 或**PlayerController**）拥有的**AbilitySystemComponent**。这样做的原因可能包括玩家的分数或长时间的能力冷却计时器，当玩家的**Pawn**被销毁和重生，或者当玩家拥有一个新的**Pawn**时，这些计时器不会重置。
+
+出于上述原因，并且出于断开连接的目的，我们将**AbilitySystemComponent**附加到**PlayerState**。但是，一旦我们尝试复制我们的**PlayerState**，我们就会发现**AbilitySystemComponent**的**AttributeSets**被设置为 `nullptr` 而不是正确的值，这被证明是一个 [引擎错误](https://issues.unrealengine.com/issue/UE-81109)。虽然有[解决方法](https://github.com/tranek/GASDocumentation#94-duplicating-blueprint-actors-is-setting-attributesets-to-nullptr)，但在我看来，正确且简单的修复方法是让我们的原始**PlayerState**保持不变，而不创建任何副本。这还为我们节省了一些时间，用于将**PlayerState**相关的属性复制到副本，尤其是在属性太多时，使我们减少出错的可能性。
+
+### 更好的、更可靠的断开连接时存储数据的方法
+
+虽然你想要在断开连接时存储的属性可以散布在**PlayerState**类的各个地方，但更体面、更优化的方法是使用结构来封装它们。这样，即使我们有一大堆要保存的数据，我们仍然可以很快地引用它们。
+
+PlayerState.h
+
+```c++
+// 断开连接的英雄的非 PlayerState 相关数据将存储在此处
+USTRUCT()
+struct FDisconnectedHeroData
+{
+    GENERATED_BODY()
+
+public:
+
+    /** 英雄的变换（位置、旋转、缩放） */
+    UPROPERTY()
+    FTransform Transform;
+
+    /** 英雄的健康值 */
+    UPROPERTY()
+    int32 Health;
+};
+
+UCLASS()
+class AMyPlayerState: public APlayerState
+{
+    GENERATED_BODY()
+
+public:
+    /** 断开连接的玩家的存储数据，因此我们在重新连接时重新应用它 */
+    UPROPERTY()
+    FDisconnectedHeroData DisconnectedHeroData;
+
+    ...
+
+};
+```
+
+为了让我们能够在 `APlayerState::OnDeactivated()` 内部提取与 pawn 相关的数据，pawn 必须在那时有效且被拥有。但是，在调用 `APlayerState::OnDeactivated()` 甚至 `APlayerState::CopyProperties()` 之前，**Pawn**会被取消拥有并被销毁。具体来说，它在以下函数中被销毁：
+
+PlayerController.cpp
+
+```c++
+void APlayerController::Destroyed()
+{
+    if (GetPawn() != NULL)
+    {
+        // 处理玩家离开游戏
+        if (Player == NULL && GetLocalRole() == ROLE_Authority)
+        {
+            PawnLeavingGame(); // 销毁我们的 pawn
+        }
+        else
+        {
+            UnPossess(); // 取消拥有我们的 pawn，将 APlayerState.PawnPrivate 设置为 null
+        }
+    }
+
+    ...
+
+    Super::Destroyed();
+}
+```
+
+因此，我们必须覆盖上述函数，既不销毁**Pawn**，也不取消拥有它，而是将功能委托给 `APlayerState::OnDeactivated()`，该函数在稍后的阶段被调用：
+
+MyPlayerController.cpp
+
+```c++
+void AMyPlayerController::Destroyed()
+{
+    if (GetSpectatorPawn() != NULL)
+    {
+        DestroySpectatorPawn();
+    }
+
+    if ( MyHUD != NULL )
+    {
+        MyHUD->Destroy();
+        MyHUD = NULL;
+    }
+
+    if (PlayerCameraManager != NULL)
+    {
+        PlayerCameraManager->Destroy();
+        PlayerCameraManager = NULL;
+    }
+
+    // 告诉游戏信息强制从其 Pausers 列表中删除此玩家的 CanUnpause 委托。
+    // 防止在暂停游戏的 PC 在游戏未取消暂停之前被销毁时，游戏卡在暂停状态。
+    AGameModeBase* const GameMode = GetWorld()->GetAuthGameMode();
+    if (GameMode)
+    {
+        GameMode->ForceClearUnpauseDelegates(this);
+    }
+
+    PlayerInput = NULL;
+    CheatManager = NULL;
+
+    Super::Super::Destroyed(); // 或 AController::Destroyed();
+}
+```
+
+接下来，我们覆盖 `AGameMode::AddInactivePlayer()`，这样它就不会复制我们原始的**PlayerState**（即，不会调用 `APlayerState::Duplicate()`，并且相应地不会调用 `APlayerState::CopyProperties()`），而是让我们保持不变：
+
+MyGameMode.h
+
+```c++
+/** 将 PlayerState 添加到不活动列表，从活动列表中删除 */
+virtual void AddInactivePlayer(APlayerState* PlayerState, APlayerController* PC) override;
+```
+
+MyGameMode.cpp
+
+```c++
+void AMyGameMode::AddInactivePlayer(APlayerState* PlayerState, APlayerController* PC)
+{
+    check(PlayerState)
+    UWorld* LocalWorld = GetWorld();
+    // 如果它是从之前的关卡来的 PlayerState，或者如果它是观察者...或者如果我们正在关闭，则不要存储它
+    if (!PlayerState->IsFromPreviousLevel() && !MustSpectate(PC) && !LocalWorld->bIsTearingDown)
+    {
+        // 我们从活动的 PlayerArray 中删除 PlayerState，因为它将保持不变 (参见 APlayerState::Destroyed)
+        GameState->RemovePlayerState(PlayerState);
+
+        // 使 PlayerState 不活动
+        PlayerState->SetReplicates(false);
+
+        // 一段时间后删除
+        PlayerState->SetLifeSpan(InactivePlayerStateLifeSpan);
+
+        // 在控制台上，我们必须检查唯一的 net id，因为网络地址无效
+        const bool bIsConsole = !PLATFORM_DESKTOP;
+        // 假设有效的唯一 id 意味着比较应该通过此方法进行
+        const bool bHasValidUniqueId = PlayerState->GetUniqueId().IsValid();
+        // 不要意外比较空网络地址（已经在开发期间同一机器上的两个客户端的问题）
+        const bool bHasValidNetworkAddress = !PlayerState->SavedNetworkAddress.IsEmpty();
+        const bool bUseUniqueIdCheck = bIsConsole || bHasValidUniqueId;
+
+        // 确保没有重复项
+        for (int32 Idx = 0; Idx < InactivePlayerArray.Num(); ++Idx)
+        {
+            APlayerState* const CurrentPlayerState = InactivePlayerArray[Idx];
+            if (!IsValid(CurrentPlayerState))
+            {
+                // 已经销毁，只需将其删除即可
+                InactivePlayerArray.RemoveAt(Idx, 1);
+                Idx--;
+            }
+            else if ((!bUseUniqueIdCheck && bHasValidNetworkAddress && (CurrentPlayerState->SavedNetworkAddress ==
+                    PlayerState->SavedNetworkAddress))
+                || (bUseUniqueIdCheck && (CurrentPlayerState->GetUniqueId() == PlayerState->GetUniqueId())))
+            {
+                // 销毁 PlayerState，然后从跟踪中删除它
+                CurrentPlayerState->Destroy();
+                InactivePlayerArray.RemoveAt(Idx, 1);
+                Idx--;
+            }
+        }
+        InactivePlayerArray.Add(PlayerState);
+
+        // 确保我们没有超过允许的不活动玩家的最大数量
+        if (InactivePlayerArray.Num() > MaxInactivePlayers)
+        {
+            int32 const NumToRemove = InactivePlayerArray.Num() - MaxInactivePlayers;
+
+            // 销毁额外的不活动玩家
+            for (int Idx = 0; Idx < NumToRemove; ++Idx)
+            {
+                APlayerState* const PS = InactivePlayerArray[Idx];
+                if (PS != nullptr)
+                {
+                    PS->Destroy();
+                }
+            }
+
+            // 然后从跟踪数组中删除它们
+            InactivePlayerArray.RemoveAt(0, NumToRemove);
+        }
+    }
+}
+```
+
+接下来，我们覆盖 `APlayerState::OnDeactivated()`，该函数默认会销毁我们原始的**PlayerState**，所以它不会这样做，我们将在其中填充我们的 `FDisconnectedHeroData` 结构：
+
+MyPlayerState.cpp
+
+```c++
+void AMyPlayerState::OnDeactivated()
+{
+    if (const AMyPawn* MyPawn = GetPawn<AMyPawn>())
+    {
+        DisconnectedHeroData.Transform = MyPawn->GetTransform();
+        DisconnectedHeroData.Health = MyPawn->GetHealth();
+        // 可以在这里提取和存储更多与 pawn 相关的数据
+    }
+
+    if (APlayerController* PC = GetPlayerController())
+    {
+        // 处理玩家离开游戏
+        if (!PC->Player)
+        {
+            PC->PawnLeavingGame();
+        }
+        else
+        {
+            PC->UnPossess();
+        }
+    }
+}
+```
+
+最后但并非最不重要的一点是，当[玩家重新登录](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Networking/Server/#connectionprocess)时，我们将不得不说明他是否是重新连接的玩家，因此我们将让他重新生成在他的旧**Transform**处：
+
+MyPlayerState.h
+
+```c++
+private:
+/** 表示此 PlayerState 属于重新连接的玩家 */
+uint8 bIsReconnecting:1;
+
+public:
+/** 获取 bIsReconnecting 的字面值。 */
+bool IsReconnecting() const
+{
+    return bIsReconnecting;
+}
+
+/** 当拥有的玩家重新连接并且此玩家状态被添加到活动玩家数组时，在服务器上调用 */
+virtual void OnReactivated() override;
+```
+
+MyPlayerState.cpp
+
+```c++
+void AMyPlayerState::OnReactivated()
+{
+    bIsReconnecting = true;
+}
+```
+
+默认情况下，启动一个新玩家始终在**PlayerStart**处生成。相反，如果他在重新连接，我们会让他在他旧的**Transform**处生成：
+
+MyGameMode.h
+
+```c++
+/** 尝试生成玩家的 pawn，如果他在重新连接，则在他的旧位置生成，或者在他的 FindPlayerStart 返回的位置生成 */
+virtual void RestartPlayer(AController* NewPlayer) override;
+```
+
+MyGameMode.cpp
+
+```c++
+void AMyGameMode::RestartPlayer(AController* NewPlayer)
+{
+    if (NewPlayer == nullptr || NewPlayer->IsPendingKillPending())
+    {
+        return;
+    }
+
+    const AMyPlayerState* PS = NewPlayer->GetPlayerState<AMyPlayerState>();
+    if(PS && PS->IsReconnecting())
+    {
+        RestartPlayerAtTransform(NewPlayer, PS->DisconnectedHeroData.Transform);
+    }
+    else
+    {
+        AActor* StartSpot = FindPlayerStart(NewPlayer);
+
+        // 如果没有找到开始点，
+        if (StartSpot == nullptr)
+        {
+            // 检查之前分配的点
+            if (NewPlayer->StartSpot != nullptr)
+            {
+                StartSpot = NewPlayer->StartSpot.Get();
+                UE_LOG(LogGameMode, Warning, TEXT("RestartPlayer: 找不到玩家开始点，使用最后一个开始点"));
+            }
+        }
+
+        RestartPlayerAtPlayerStart(NewPlayer, StartSpot);
+    }
+}
+```
+
+### 在重新连接时恢复数据
+
+以下是重新连接的玩家的调用堆栈（按顺序），直到他的数据被覆盖：
+
+```c++
+1. UWorld::SpawnPlayActor()
+2. AGameMode::Login(), AGameMode::PostLogin()
+3. AGameMode::FindInactivePlayer()
+4. AGameMode::OverridePlayerState()
+5. APlayerState::DispatchOverrideWith()
+6. APlayerState::OverrideWith(), APlayerState::ReceiveOverrideWith() // 原生和蓝图
+```
+
+现在用语言来说，这是 [当玩家重新登录到](https://wizardcell.com/unreal/persistent-data/#gameframework-objects-creation-order-and-calls)游戏服务器时发生的部分事情：
+
+1.  **GameMode** 为他重新创建了一个新的**PlayerController** 和**Pawn**（后者被前者拥有）。
+2.  **PlayerController** 为他重新创建了一个新的**PlayerState**、**PlayerCameraManager** 和**HUD**。
+3.  原始不活动的**PlayerState** `CurrentPlayerState` 被检索并设置为我们使用的**PlayerState**。然后，它被我们新创建的**PlayerController**拥有，重新激活，它的生命周期计时器被清除，并且设置为不被销毁。
+4.  现在看一下局部变量 `OldPlayerState`，正如它的名字所暗示的那样，人们可能会猜测它被分配了旧的/原始的不活动的**PlayerState**。让这种假设更合法的因素是，它被传递给 `AGameMode::OverridePlayerState()`，而后者又在某个时刻将其传递给 `APlayerState::ReceiveOverrideWith()`，它的文档建议如下：
+
+PlayerState.h
+
+```c++
+/*
+ * 可以在蓝图子类中实现，用于在重新连接时将更多属性从旧的 PlayerState 移动到新的 PlayerState
+ *
+ * @param OldPlayerState 旧的 PlayerState，我们用它来填充新的 PlayerState
+ */
+UFUNCTION(BlueprintImplementableEvent, Category = PlayerState, meta = (DisplayName = "OverrideWith"))
+void ReceiveOverrideWith(APlayerState* OldPlayerState);
+```
+
+而实际上，局部变量 `OldPlayerState` 被分配了新生成的，"空的"**PlayerState**。因此，`AGameMode::OverridePlayerState()` 被调用在我们的原始刚刚激活的**PlayerState**上，传递了“无意义地”生成的，几乎空的**PlayerState**。以下内容在此过程中被覆盖：
+
+PlayerState.cpp
+
+```c++
+void APlayerState::OverrideWith(APlayerState* PlayerState)
+{
+    SetIsSpectator(PlayerState->IsSpectator());
+    SetIsOnlyASpectator(PlayerState->IsOnlyASpectator());
+    SetUniqueId(PlayerState->GetUniqueId());
+    SetPlayerNameInternal(PlayerState->GetPlayerName());
+}
+```
+
+如你所见，覆盖的内容非常边缘化，很可能对重新连接过程很重要。
+理论上，你可以使用此函数来覆盖可能在玩家重新连接时已过时的其他类型的数据。例如，当团队切换阵营时。如果未正确处理此类情况，重新连接的玩家可能会发现自己身处错误的团队！
+
+最后，几乎空的 `OldPlayerState` 然后调用 `SetIsInactive(true)`，后者又调用 `APlayerState::OnRep_bIsInactive()`，防止它在 `AGameStateBase.PlayerArray` 中注册。然后，`OldPlayerState` 被销毁，并且原始的，刚刚重新激活的**PlayerState** 调用 `APlayerState::OnReactivated()`，默认情况下什么也不做，尽管我们上面很好地使用了它。
+
+**注意：** 不幸的是，目前将玩家与他们之前的**PlayerState**匹配的方式是通过比较他们的 IP 地址。如果多个玩家使用相同的远程 IP 地址进行游戏，错误的玩家可能会接管他们网络上的另一个断开连接的玩家。奇怪的是，这不会影响控制台构建，因为它们会检查玩家的 `PlayerState.UniqueId`（在 **OnlineSubsystems** 中称为 `UniqueNetId`），这是一个更好的唯一标识符。默认的 OSS 是 **OnlineSubsystemNull**，它没有有效的 `UniqueNetId`，这就是为什么需要具有唯一用户的后端的原因，即，`APlayerState::GetUniqueId()` 仅在你有加载的 OSS（例如 **Steam** 或 **EOS**）时才相关/一致。
+
+### 如何断开连接/重新连接？
+
+理论上，可以有多种实现此类功能的方法。值得庆幸的是，虚幻引擎已经将这些功能实现为控制台命令。我们在控制台命令行中键入的某些命令在某个时刻在以下函数内部被解析：
+
+UnrealEngine.cpp
+
+```c++
+bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
+{
+    ...
+
+    else if( FParse::Command( &Cmd, TEXT("DISCONNECT")) )
+    {
+        return HandleDisconnectCommand( Cmd, Ar, InWorld );
+    }
+    else if( FParse::Command( &Cmd, TEXT("RECONNECT")) )
+    {
+        return HandleReconnectCommand( Cmd, Ar, InWorld );
+    }
+
+    ...
+}
+```
+
+- **DISCONNECT**：将客户端与当前游戏/服务器断开连接。它对应于原生函数 `UEngine::HandleDisconnectCommand()`，后者调用 `UEngine::HandleDisconnect()`。断开连接实际上是**绝对**或**部分**类型的转移（取决于断开连接的情况），这两种情况都会导致**硬**转移。
+- **RECONNECT**：将客户端重新连接到当前游戏/服务器。它对应于原生函数 `UEngine::HandleReconnectCommand()`。断开连接实际上是**绝对**类型的转移，这将导致**硬**转移。
+
+**注意：** 这些命令不像我们之前看到的与转移相关的命令那样自动完成，因为它们没有为其设置 `ManualAutoCompleteList`。
+
+以下是你可以在代码中选择执行上述功能的几个地方：
+
+- `UKismetSystemLibrary::ExecuteConsoleCommand()` 原生函数（蓝图版本具有相同的名称），并且 `Command` 参数可以是 `DISCONNECT` 或 `RECONNECT`。
+- `UGameInstance::Exec()` 函数和 `Cmd` 参数可以是 `DISCONNECT` 或 `RECONNECT`。
+
+## 持久运行时数据
+
+幸运的是，在保存我们的数据以进行关卡更改或重新连接时，有多种选项可以考虑。请注意，每个选项中的**用法**部分反映了我自己的观点；因此，你可以偏离脚本。作为经验法则，我倾向于在服务器端存储服务器授权的数据，在客户端存储客户端授权的数据。但是，有时服务器授权的数据会被直观地存储在客户端，这迫使我们在检索数据之前和应用数据之前验证数据。
+
+## 1. GameInstance
+
+---
+
+**GameInstance** 是一个用于运行游戏实例的高级管理器**对象**。在游戏创建时生成，并在游戏实例关闭之前不会销毁。换句话说，**GameInstance** 从一个关卡持续到另一个关卡，无论转移类型如何，这使其成为保存数据的好选择。作为独立游戏运行，将有一个。在 PIE 中运行将为每个 PIE 实例生成一个。
+
+### 如何指定我的自定义类？
+
+你已经可以告诉它不应该在自定义**GameMode**的`类默认值`内的`类`类别中，因为**GameInstance**不是特定于关卡的，因此它没有绑定到**GameMode**。
+
+要将你的项目配置为使用你想要的自定义**GameInstance**，请查看`项目设置->地图和模式`，你应该在最底部看到这个：
+
+![GameInstance 配置](https://wizardcell.com//assets/blog/persistent-data/game-instance-configuration.png)
+
+### 这个类在哪里存在？
+
+这个类存在于服务器和客户端上，尽管它不可复制；因此，你无法复制此类中的任何数据。
+
+### 保存和检索数据
+
+这可能是最简单的方法，因为你所要做的就是在转移到新关卡之前保存数据，并在转移到该关卡之后检索保存的数据。至于断开连接，它没有任何不同。一个重新连接的玩家，实际上是转移到他在的地图的玩家。我们已经[看到](https://wizardcell.com/unreal/persistent-data/#the-pitfalls)，`APlayerState::OnDeactivated()` 是一个很好的时间点，用于在断开连接时保存数据；因此，在那里提取你需要的数据，并在你的**GameInstance**中连接它。当客户端断开连接时，他的客户端**GameInstance**保留在他自己的本地机器的内存中。重新连接后，数据可以被检索、验证并根据需要在何处重新应用。
+
+### 用法
+
+- 在**硬**转移期间，在关卡之间持久化世界状态数据。
+- 在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
+
+**提示：** 考虑使用[下一个选项](https://wizardcell.com/unreal/persistent-data/#2-programming-subsystems)代替。
+
+## 2. 编程子系统
+
+---
+
+虚幻引擎中的子系统是具有受管理生命周期的自动实例化的类。这些类提供了易于使用的扩展点，程序员可以在其中立即获得蓝图和 Python 的公开，同时避免修改或覆盖引擎类的复杂性。子系统不支持网络，因此你不应该直接在它们内部复制任何数据。有关它们及其有用的更多信息，可以在 [offical docs](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/Subsystems/) 或 [benui 的博文](https://benui.ca/unreal/subsystem-singleton/) 中找到。
+
+### 这个类在哪里存在？
+
+正如你可能已经看到的那样，有 5 个不同的父类可供选择。尽管如此，我们将阐明那些在此上下文中使用的类：**GameInstance** 和 **LocalPlayer** 子系统。两者都具有几乎与**GameInstance** 相同的（但不相同）生命周期，这意味着它们会持续转移和断开连接。
+
+**GameInstance** 子系统存在于服务器和客户端上，但正如提到的，它不可复制，即，这两个版本不一定同步。
+
+**LocalPlayer** 子系统为每个**LocalPlayer** 存在。这意味着它在服务器上对于监听服务器（主机）玩家存在，如果是监听服务器设置，则存在，并在客户端上对于其他每个客户端（托管）玩家存在。在专用服务器设置中，它不会存在于服务器上，但仅在客户端上存在于每个客户端。
+
+### 保存和检索数据
+
+在这种情况下保存和检索数据与在 [**GameInstance**](https://wizardcell.com/unreal/persistent-data/#storing--retrieving-data) 中的完成方式没有什么不同，因为提到的子系统具有与**GameInstance** 类似的生命周期（它们位于 [`UWorlds`](https://docs.unrealengine.com/5.0/en-US/API/Runtime/Engine/Engine/UWorld/) 之外），使其成为在转移或断开连接时持久化数据的更好位置。原因在于，使用**GameInstance**持久化数据最终可能会快速膨胀它，这使得处理诸如**Sessions**，**SaveGames**等其他**对象**的效率降低。
+
+### 用法
+
+- 保持一个优化的**GameInstance**。
+
+#### GameInstance 子系统
+
+- 在**硬**转移期间，在关卡之间持久化世界状态数据。
+- 在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
+
+##### 用法示例
+
+[统计系统](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/Subsystems/#subsystemsexample)，用于跟踪收集的资源数量。
+
+#### LocalPlayer 子系统
+
+- 在**硬**转移期间，在关卡之间持久化特定于玩家和本地玩家的数据（例如 UI、输入等）。
+- 在断开连接时存储特定于玩家和本地玩家的数据，并在重新连接时检索它。
+
+##### 用法示例
+
+[增强输入](https://docs.unrealengine.com/en-US/enhanced-input-in-unreal-engine/) 的**LocalPlayer** 子系统（[`UEnhancedInputLocalPlayerSubsystem`](https://github.com/EpicGames/UnrealEngine/blob/release/Engine/Plugins/Experimental/EnhancedInput/Source/EnhancedInput/Public/EnhancedInputSubsystems.h)），它允许你添加映射上下文，绑定输入委托等等。
+
+**注意：** 不要将 [**编程子系统**](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/Subsystems/) 与 [**在线子系统**](https://docs.unrealengine.com/en-US/online-subsystem-in-unreal-engine/) 混淆，因为它们是不同的实体。
+
+## 3. PlayerState
+
+---
+
+为服务器上的每个玩家（或独立游戏）创建一个**PlayerState**。**PlayerStates** 与所有客户端相关并复制到所有客户端，并包含关于玩家的网络游戏相关信息，例如他的名字、分数、ping 等。
+
+### 这个类在哪里存在？
+
+这个类**Actor** 存在于服务器上，复制所有客户端，并且始终相关 (`bAlwaysRelevant = true`)。因此，每个客户端都始终了解他的**PlayerState** 和所有其他客户端的**PlayerState**。
+
+### 复制数据
+
+在**无缝转移**或**断开连接**时，将数据从这个**Actor**的旧实例复制到一个新实例。这两个过程都在服务器上进行。
+
+### 用法
+
+- 在**无缝**转移期间，在关卡之间持久化特定于玩家的数据。
+- 在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
+
+### 用法示例
+
+假设我们有一个自定义的**PlayerState**，其中包含一些自定义成员变量：
+
+MyPlayerState.h
+
+```c++
+// 无缝转移英雄的非 PlayerState 相关数据将存储在此处
+USTRUCT()
+struct FSeamlessTraveledHeroData
+{
+    GENERATED_BODY()
+
+    /** 玩家当前选择要作为其重生的英雄 */
+    UPROPERTY()
+    TSubclassOf<APawn> SelectedHero;
+}
+
+UCLASS()
+class AMyPlayerState: public APlayerState
+{
+    GENERATED_BODY()
+
+public:
+    /** 玩家当前击杀数 */
+    UPROPERTY(Transient, Replicated)
+    int32 Kills;
+
+    /** 玩家当前助攻数 */
+    UPROPERTY(Transient, Replicated)
+    int32 Assists;
+
+    /** 玩家当前死亡数 */
+    UPROPERTY(Transient, Replicated)
+    int32 Deaths;
+
+    /** 无缝转移的玩家的存储数据，因此当玩家完成加载时，我们重新应用它 */
+    UPROPERTY()
+    FSeamlessTraveledHeroData SeamlessTraveledHeroData;
+
+    ...
+
+};
+```
+
+默认情况下，当玩家**无缝**转移（或断开连接）时，这些属性都不会被保留。要修复此问题，我们需要覆盖以下函数：
+
+PlayerState.h
+
+```c++
+/** 复制需要在不活动 PlayerState 中保存的属性 */
+virtual void CopyProperties(APlayerState* PlayerState);
+```
+
+请注意，这与我们之前涵盖的[在断开连接时保留一些数据的](https://wizardcell.com/unreal/persistent-data/#storing-data-on-disconnection)相同的功能。正如我们之前所看到的，只有一小部分内置属性被保留，而我们自定义的属性不幸地没有被保留，因此我们必须自己完成。
+
+MyPlayerState.cpp
+
+```c++
+void AMyPlayerState::CopyProperties(APlayerState* PlayerState)
+{
+    Super::CopyProperties(PlayerState); // 这被调用了，因此我们保留了默认情况下选择保留的数据
+
+    if (AMyPlayerState* NewPlayerState = Cast<AMyPlayerState>(PlayerState))
+    {
+        NewPlayerState->SeamlessTraveledHeroData.SelectedHero = SelectedHero;
+        NewPlayerState->Kills = Kills;
+        NewPlayerState->Assists = Assists;
+        NewPlayerState->Deaths = Deaths;
+    }
+}
+```
+
+**注意：** 虽然旧关卡和新关卡可以具有相同的**PlayerState**类，但更优雅的方法是为每个关卡提供不同的类，并使用一个通用的父**PlayerState**类（它们从其继承），其中包含在关卡之间传输的所有数据。
+
+再次考虑一下，此函数用于在转移和断开连接之间持久化数据，如果有一些数据你不想在转移之间持久化，但你希望它们在断开连接之间持久化，该怎么办？
+
+这就是 `APlayerState::Reset()` 的作用，由 `APlayerController::SeamlessTravelFrom()` 调用。应该重置且在转移之间不保留的属性应该放在那里。这是该函数的默认实现：
+
+PlayerState.cpp
+
+```c++
+void APlayerState::Reset()
+{
+    Super::Reset();
+    SetScore(0);
+    ForceNetUpdate();
+}
+```
+
+如你所见，`Score` 属性被重置，因此它不会持久化转移，但它会持久化断开连接。
+
+让我们覆盖它，使它看起来像这样：
+
+PlayerState.cpp
+
+```c++
+void AMyPlayerState::Reset()
+{
+    Super::Reset(); // 这被调用了，因此我们重置了默认情况下选择重置的数据，例如，Score
+
+    Kills = 0;
+    Assists = 0;
+    Deaths = 0;
+}
+```
+
+现在，在**无缝**转移时：`Kills`、`Assists` 和 `Deaths` 都将被重置，但保留了 `SelectedHero`。但是，前三个属性在**断开连接**时不会被重置。
+
+**注意：** `APlayerState::CopyProperties()` 在**无缝**和**硬**转移时都被调用。转移时，转移必须是**无缝**的，才能调用它。在断开连接时，根据定义转移是**硬**的，我们之前已经看到它被调用（除非[我们没有这样做](https://wizardcell.com/unreal/persistent-data/#the-better-more-reliable-way-to-stash-data-on-disconnection)）。
+
+## 4. PlayerController
+
+---
+
+**PlayerController** 是**Pawn**与控制它的玩家之间的接口。**PlayerController** 本质上代表了人类玩家的意志。
+
+### 这个类在哪里存在？
+
+这个类**Actor** 存在于服务器上，复制到拥有客户端，并且仅与他相关 (`bOnlyRelevantToOwner = true`)。因此，每个客户端仅知道他自己的**PlayerController**。
+
+### 复制数据
+
+在**无缝**转移时，数据从这个**Actor** 的旧实例复制到新实例，**并且仅**当新的**GameMode**的**PlayerController**类与之前**不同**或新的**GameMode**的类是 `AGameModeBase`（而不是 `AGameMode`）的子类时。如果新的**GameMode**的类是 `AGameMode` 的一个**子类**，并且它的**PlayerController**类与之前**相同**，则不进行数据复制，因为相同的**Actor**会持续存在。数据复制过程在服务器上进行。
+
+### 用法
+
+- 在**无缝**转移期间，在关卡之间持久化特定于玩家的数据。
+- 在**无缝**转移期间，在关卡之间持久化相同的整个**PlayerController** 和**PlayerCameraManager** **Actor** 实例。
+
+### 用法示例
+
+让我们快速查看一下执行数据保存的函数的文档：
+
+GameModeBase.h
+
+```c++
+/**
+ * 用于在无缝转移时交换视口/连接的 PlayerControllers，并且新的 GameMode 的
+ * 控制器类与之前的不同
+ * 包括网络处理
+ * @param OldPC - 应该被丢弃的旧 PC
+ * @param NewPC - 应该用于玩家的新 PC
+ */
+virtual void SwapPlayerControllers(APlayerController* OldPC, APlayerController* NewPC);
+```
+
+快速查看此函数的实现，我们可以看出保留了哪些属性：
+
+GameModeBase.cpp
+
+```c++
+void AGameModeBase::SwapPlayerControllers(APlayerController*OldPC, APlayerController* NewPC)
+{
+    if (IsValid(OldPC) && IsValid(NewPC) && OldPC->Player != nullptr)
+    {
+        // 将 Player 移动到新的 PC
+        UPlayer* Player = OldPC->Player;
+        NewPC->NetPlayerIndex = OldPC->NetPlayerIndex; //@warning: 关键是这个是第一个，因为 SetPlayer() 可能会触发 RPC
+        NewPC->NetConnection = OldPC->NetConnection;
+        NewPC->SetReplicates(OldPC->GetIsReplicated());
+        NewPC->SetPlayer(Player);
+        NewPC->CopyRemoteRoleFrom(OldPC);
+
+        K2_OnSwapPlayerControllers(OldPC, NewPC);
+
+        ...
+    }
+
+    ...
+}
+```
+
+请注意，上面的原生版本函数调用了以下**蓝图**版本：
+
+GameModeBase.h
+
+```c++
+/** 在无缝转移期间将 PlayerController 交换为新的 PlayerController 时调用 */
+UFUNCTION(BlueprintImplementableEvent, Category=Game, meta=(DisplayName="OnSwapPlayerControllers", ScriptName="OnSwapPlayerControllers"))
+void K2_OnSwapPlayerControllers(APlayerController* OldPC, APlayerController* NewPC);
+```
+
+**注意：** 上面的函数必须在目标关卡的**GameMode**类中被覆盖。
+
+## 5. GetSeamlessTravelActorList
+
+---
+
+这个函数有两个版本，分别在两个不同的类中：**GameMode** 和 **PlayerController**。让我们看一下前者的文档：
+
+GameModeBase.h
+
+```c++
+/**
+ * 在服务器端调用，在无缝关卡过渡期间获取应该移动到新关卡的 Actors 列表
+ * PlayerControllers，Role < ROLE_Authority Actors，以及任何位于列表中 Actor
+ * 内部的非 Actor 对象（即 Object.Outer == Actor in the list）
+ * 都会被自动移动，无论它们是否包含在此处
+ * 只有 PersistentLevel 中的动态 actors 可以移动（这包括在游戏过程中生成的所有 actors）
+ * 这是为过渡的两个部分调用的，因为 actors 可能会在中途更改（例如，玩家可能会加入或离开游戏）
+ * @see also PlayerController::GetSeamlessTravelActorList() (在客户端调用的函数)
+ * @param bToTransition 如果我们从旧关卡到过渡地图，则为 true，如果我们从过渡地图到新关卡，则为 false
+ * @param ActorList (out) 要维护的 actors 列表
+ */
+virtual void GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList);
+```
+
+我们已经[看到](https://wizardcell.com/unreal/persistent-data/#persisting-data-across-seamless-travel)，它用于将**对象**持久化到过渡地图和目标地图，因为它将被调用两次，一次是到达过渡地图时，另一次是到达目标地图时。保证在整个过程中**对象**不会被垃圾收集。
+
+### 保存和检索数据
+
+是什么让此选项与众不同的是，你不需要第三方**对象**来保存有关相关**Actor**的数据。你甚至不需要复制任何数据（只要你没有手动销毁**Actor**），因为**Actor**本身会以很少或没有努力地持续存在。但是，有很大几率是指向我们持久生成的**Actor**的**Object**不是持久的，即，它将被销毁并进行垃圾收集，从而导致直接引用到我们持久**Actor**的丢失。幸运的是，我们在原生代码中执行 `TActorRange<PersistentActorClass>`，或者在蓝图中执行 `GetAllActorsOfClass`，以再次找到我们持久的**Actor**，并重新建立链接。它在你尝试在新的关卡中找到它的时间点没有关系，它都会在那里，这使得它非常适合初始化顺序。
+
+### 用法
+
+- 以很少或没有努力的方式真正地持久化**对象**。
+- 非常适合初始化顺序。
+
+#### AGameModeBase:: GetSeamlessTravelActorList
+
+- 在**无缝**转移期间，持久化服务器端世界状态**对象**。
+
+#### APlayerController:: GetSeamlessTravelActorList
+
+- 在**无缝**转移期间，持久化本地玩家（通常是客户端）相关的**对象**。
+
+**注意：** 如我们[之前所见](https://wizardcell.com/unreal/persistent-data/#persistent-objects-on-server-to-destination-map)，**PlayerController** 函数版本可以在服务器端调用，以防监听服务器玩家。
+
+### 用法示例
+
+假设我们想要存储有关参加比赛的每个团队的信息。通常存储比赛状态信息的**Actor** 是 **GameState**。但是，如果我们希望这些信息在关卡之间持续存在，这样我们就可以在新的比赛开始之前根据该信息奖励玩家。另外，如果团队不平衡，并且我们希望我们的平衡系统在新的比赛开始之前自动平衡它们，该怎么办？
+
+我们已经提到了[为什么](https://wizardcell.com/unreal/persistent-data/#should-they-be-kept-to-destination-map)我们不应该将 **GameState** 持久化到目标地图。相反，我们将创建一个类似的被复制的、始终相关的、单例的**Actor**：
+
+TeamSetup.h
+
+```c++
+USTRUCT()
+struct FTeamInfo
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    int32 TeamId;
+
+    UPROPERTY()
+    FText Name;
+
+    UPROPERTY()
+    int32 Score;
+
+    void AddScore(int32 InScore)
+    {
+        Score += InScore;
+    }
+};
+
+UCLASS()
+class ATeamSetup : public AInfo
+{
+    GENERATED_BODY()
+
+public:
+
+    ATeamSetup(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+    UPROPERTY(Transient)
+    TArray<FTeamInfo> Teams;
+};
+```
+
+TeamSetup.cpp
+
+```c++
+ATeamSetup::ATeamSetup(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer.DoNotCreateDefaultSubobject(TEXT("Sprite")))
+{
+    bReplicates = true;
+    bAlwaysRelevant = true;
+}
+```
+
+我们最终将拥有两个 **GameMode**：`ALobbyGameMode` 和 `ACombatGameMode`。一个好的做法是将这两个类都子类化为 `ABaseGameMode`，其中包含了共享的内容，包括需要持续存在的内容。在我们的例子中，我们将让 `ALobbyGameMode` 生成它，并缓存一个指向它的指针：
+
+BaseGameMode.h
+
+```c++
+/** 用于设置团队并将团队相关信息复制到所有客户端 */
+UPROPERTY(Transient)
+TObjectPtr<ATeamSetup> TeamSetup;
+
+virtual void GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList) override;
+```
+
+BaseGameMode.cpp
+
+```c++
+void ABaseGameMode::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList)
+{
+    Super::GetSeamlessTravelActorList(bToTransition, ActorList);
+
+    ActorList.Add(TeamSetup);
+}
+```
+
+LobbyGameMode.h
+
+```c++
+UCLASS()
+class ALobbyGameMode : public AGameMode
+{
+    GENERATED_BODY()
+
+public:
+
+    virtual void PreInitializeComponents() override;
+};
+```
+
+LobbyGameMode.cpp
+
+```c++
+void ALobbyGameMode::PreInitializeComponents()
+{
+    Super::PreInitializeComponents();
+
+    FActorSpawnParameters SpawnInfo;
+    SpawnInfo.Instigator = GetInstigator();
+    SpawnInfo.ObjectFlags |= RF_Transient;  // 我们永远不想将团队设置保存到地图中
+
+    UWorld* World = GetWorld();
+    TeamSetup = World->SpawnActor<ATeamSetup>(ATeamSetup::StaticClass(), SpawnInfo);
+}
+```
+
+为了让我们的 `TeamSetup` **Actor** 能够被所有人轻松访问，我们将把它传递给 `ACombatGameState`，该 **Actor** 将被复制并且始终与所有客户端相关。正如我们[先前所指出的](https://wizardcell.com/unreal/persistent-data/#saving--retrieving-data-2)，`ALobbyGameMode` 有一个指向我们要持久化的 **Actor** 的指针，尽管它[不会持久化到目标地图](https://wizardcell.com/unreal/persistent-data/#persistent-objects-on-server-to-transition-map-only)，这会导致与 `TeamSetup` **Actor** 的直接引用丢失。为了重新建立连接，我们必须再次找到它：
+
+CombatGameMode.h
+
+```c++
+UCLASS()
+class ACombatGameMode : public ABaseGameMode
+{
+    GENERATED_BODY()
+
+public:
+    /**
+     * 使用默认设置初始化 GameState actor
+     * 在 GameMode 的 PreInitializeComponents() 期间调用，在生成 GameState 之后
+     * 以及在 Reset() 期间
+     */
+    virtual void InitGameState() override;
+}
+```
+
+CombatGameMode.cpp
+
+```c++
+void ACombatGameMode::InitGameState()
+{
+    Super::InitGameState();
+
+    for (ATeamSetup* MyTeamSetup : TActorRange<ATeamSetup>(GetWorld()))
+    {
+        TeamSetup = MyTeamSetup; // 重新建立连接
+
+        if(ACombatGameState* GS = GetGameState<ABTGameState>())
+        {
+            GS->TeamSetup = TeamSetup; // 将它缓存在 GameState 中，这样它就可以在客户端上轻松访问
+        }
+    }
+}
+```
+
+请注意，我们在新的 **GameMode** 被 [实例化](https://docs.unrealengine.com/4.26/en-US/ProgrammingAndScripting/ProgrammingWithCPP/UnrealArchitecture/Actors/ActorLifecycle/) 之前就找到了 **Actor**，因此可以在调用 `BeginPlay()` 之前找到它，这非常适合初始化顺序，因此它就在那里，无论我们尝试找到它的时间有多早。
+
+## 6. SaveGame
+
+---
+
+这个类充当保存游戏**对象**的基本类，该对象可用于保存有关游戏状态的信息。
+
+### 这个类在哪里存在？
+
+这个类在本地创建，即，在任何你保存数据的地方创建。因此，它既可以存在于服务器上，也可以存在于客户端上，尽管它不支持任何类型的复制。
+
+### 保存和检索数据
+
+一个 **SaveGame** **Object**/file 直接保存到你的磁盘，这使它成为一个很好的类，用于保存应该在游戏关闭时持续存在的数据（这标志着 **GameInstance** 的生命周期和任何具有相似生命周期的子系统的结束）。根据你的游戏大小，你可能拥有多个 **SaveGame** **Objects**，因此跟踪它们变得很棘手，并且如果管理不当，它会变得一团糟。因此，**GameInstance** 可以作为我们所有 **SaveGame** **Objects** 的管理器而派上用场。如果你认为这会使你的 **GameInstance** 类膨胀，你可以选择一个 **GameInstance** 子系统。这两个选项都很好，因为只要游戏应用程序正在运行，它们就会存活，并且可以从几乎任何地方轻松访问它们。可以在转移或断开连接时保存数据，并在转移完成或重新连接时检索/加载数据。
+
+### 用法
+
+- 保存应该在游戏退出时持续存在的特定于玩家或世界状态的数据。
+- 保存游戏用户设置（尽管通常它们保存在 [特殊的文件配置](https://docs.unrealengine.com/4.27/en-US/API/Runtime/Engine/GameFramework/UGameUserSettings/) 中）。
+
+### 用法示例
+
+我偶然发现了大量的示例，但以下是我建议的示例：
+
+- [保存和加载你的游戏（官方文档）](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/SaveGame/)
+- [虚幻引擎 C++ 保存系统 (Tom Looman 教程)](https://www.tomlooman.com/unreal-engine-cpp-save-system/)
+- [SPUD：Steve 的持久虚幻数据库（完整的保存系统插件）](https://github.com/sinbad/SPUD)
+
+## 7. 游戏选项字符串
+
+---
+
+虽然之前的方法围绕**对象**进行，但这个方法并非如此。
+
+我们已经提到了选项字符串，它是所谓的**URL**的一部分，在 [**转移类型**](https://wizardcell.com/unreal/persistent-data/#travel-types)的上下文中。你已经可以告诉我们可以充分利用它，以便在转移时持久化数据。
+
+**记住：** 加载到游戏是一个转移，特别是一个硬转移。
+
+### URL 结构
+
+以下是**参数**一个**URL**由哪些组成：
+
+EngineBaseTypes.h
+
+```c++
+// URL 结构。
+USTRUCT()
+struct ENGINE_API FURL
+{
+    GENERATED_USTRUCT_BODY()
+
+    // 协议，例如 "unreal" 或 "http"。
+    UPROPERTY()
+    FString Protocol;
+
+    // 可选的主机名，例如 "204.157.115.40" 或 "unreal.epicgames.com"，如果本地为空。
+    UPROPERTY()
+    FString Host;
+
+    // 可选的主机端口。
+    UPROPERTY()
+    int32 Port;
+
+    UPROPERTY()
+    int32 Valid;
+
+    // 地图名称，例如 "SkyCity"，默认为 "Entry"。
+    UPROPERTY()
+    FString Map;
+
+    // 可选的下载地图的位置，如果客户端没有
+    UPROPERTY()
+    FString RedirectURL;
+
+    // 选项。
+    UPROPERTY()
+    TArray<FString> Op;
+
+    // 进入的门户，默认为 ""。
+    UPROPERTY()
+    FString Portal;
+
+    // 静态。
+    static FUrlConfig UrlConfig;
+    static bool bDefaultsInitialized;
+
+    ...
+};
+```
+
+**URLs** 可以传递给可执行文件，以强制游戏在启动时加载特定的地图。这些还可以与 SERVER 或 EDITOR 模式结合使用，以运行编辑器或具有特定地图的服务器。传递**URL**是可选的，但如果存在模式开关，则必须紧跟在可执行文件名或任何模式开关之后。
+
+**URL** 由**两部分**组成：**地图名称或服务器 IP 地址**和一系列**可选的附加参数**。地图名称 (`FURL.Map`) 可以是位于 Maps 目录中的任何地图。此处包含文件扩展名 (`.umap`) 是可选的。要加载未在 Maps 目录中找到的地图，可以使用绝对路径或来自 Maps 目录的相对路径。在这种情况下，包含文件扩展名是强制性的。服务器 IP 地址 (`FURL.Host`) 是标准的四部分 IP 地址，由四个介于 0 和 255 之间的值组成，用句点分隔。附加选项 (`FURL.Op`) 通过将它们附加到地图名称或服务器 IP 地址来指定。每个选项都以 `?` 开头（充当分隔符），并且可以使用 `=` 设置值，即，以以下格式：`?option1=value1?option2=value2`。以 `-` 开头的选项将从缓存的**URL**选项中删除该选项。
+
+**注意：** 任何添加的无意义的字符（前导空格、加倍的 `?`）通常会被跳过。不允许其他字符（双斜杠/反斜杠，任何组合，也不允许 `\?`）导致无效的**URL**（即，`FURL.Valid = 0`）。因此，你不应该尝试使其失败，而应该只放置所需的内容。
+
+### URL 内置选项
+
+每个连接有两个缓存的**URL**：
+
+1.  **World URL** (`UWorld.URL`)：缓存的加载世界 URL。
+2.  **Demo URL** (`FReplayHelper.DemoURL`)：缓存的重放 URL。
+
+下表包含*所有*内置选项：
+
+| 选项                         | 描述                                                       | World URL 选项？ | Demo URL 选项？ | 注意                                                                                                                                                                                                    |     |
+| ---------------------------- | ---------------------------------------------------------- | ---------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| Game                         | 要使用的 GameMode 类的别名。                               | ✔️               | ✔️              | 覆盖默认值。别名在 项目设置->地图和模式->默认模式->高级->游戏模式类别名 中设置。                                                                                                                        |     |
+| Load                         | 如果设置，则不会缓存加载的世界 URL。                       | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Name                         | 要使用的玩家/机器人名称。                                  | ✔️               |                 | 长度限制为 20 个字符。                                                                                                                                                                                  |     |
+| MaxPlayers                   | 服务器允许的最大玩家数量。                                 | ✔️               |                 |                                                                                                                                                                                                         |     |
+| MaxSpectators                | 服务器允许的最大观察者数量。                               | ✔️               |                 |                                                                                                                                                                                                         |     |
+| SplitscreenCount             | 允许从一个连接进行分屏的玩家数量。                         | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Listen                       | 指定服务器为监听服务器。                                   | ✔️               |                 |                                                                                                                                                                                                         |     |
+| bIsLanMatch                  | 设置多人游戏是否在本地网络上。                             | ✔️               |                 |                                                                                                                                                                                                         |     |
+| bPassthrough                 | 设置此网络连接是否直接传递到 IpConnection。                | ✔️               |                 | 使用直通套接字。                                                                                                                                                                                        |     |
+| bUseIPSockets                | 设置是否使用 IP 套接字。                                   | ✔️               |                 |                                                                                                                                                                                                         |     |
+| LAN                          | 用于设置 lan 相关设置。                                    | ✔️               |                 | 检索 ConfiguredLanSpeed。                                                                                                                                                                               |     |
+| bIsFromInvite                | 指定加入的玩家被邀请。                                     | ✔️               |                 |                                                                                                                                                                                                         |     |
+| SpectatorOnly                | 以观察者模式启动游戏。                                     | ✔️               |                 |                                                                                                                                                                                                         |     |
+| SkipSpawnSpectatorController | 跳过生成演示观察者。                                       |                  | ✔️              |                                                                                                                                                                                                         |     |
+| DemoRec                      | 要使用的演示录制名称。                                     |                  | ✔️              |                                                                                                                                                                                                         |     |
+| DemoFriendlyName             | 重放描述，最好是人类可读的。                               |                  | ✔️              |                                                                                                                                                                                                         |     |
+| RecordMapChanges             | 设置演示网络驱动程序是否记录地图更改/转移。                |                  | ✔️              |                                                                                                                                                                                                         |     |
+| ReplayStreamerOverride       | 覆盖默认的 FReplayHelper.ReplayStreamer。                  |                  | ✔️              | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                                       |     |
+| ReplayStreamerDemoPath       | 更改存储演示的基目录。                                     |                  | ✔️              | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                                       |     |
+| SkipToLevelIndex             | 导致当前重放跳到具有指定索引的关卡。                       |                  | ✔️              | 来自使用的关卡列表。                                                                                                                                                                                    |     |
+| AsyncLoadWorldOverride       | 覆盖默认的异步世界加载 CVarDemoAsyncLoadWorld 值。         |                  | ✔️              | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                                       |     |
+| LevelPrefixOverride          | 设置此网络驱动程序要使用的关卡 ID/PIE 实例 ID。            | ✔️               |                 |                                                                                                                                                                                                         |     |
+| AuthTicket                   | 用于验证的令牌。                                           | ✔️               |                 |                                                                                                                                                                                                         |     |
+| EncryptionToken              | 令牌，用于使服务器开始启用连接加密的过程。                 | ✔️               |                 | 更多信息请见此处。                                                                                                                                                                                      |     |
+| NoTimeouts                   | 完全忽略超时。应仅用于开发。                               | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Failed                       | 发生了转移失败。                                           | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Closed                       | 与服务器的连接已关闭。                                     | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Restart                      | 重用我们上次转移的 URL。                                   | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Quiet                        |                                                            | ✔️               |                 |                                                                                                                                                                                                         |     |
+| SeamlessTravel               | 将 ServerTravel 设置为无缝。                               | ✔️               |                 | 覆盖默认值（即将推出）。                                                                                                                                                                                |     |
+| NoSeamlessTravel             | 将 ServerTravel 设置为非无缝。                             | ✔️               |                 | 覆盖默认值（即将推出）。                                                                                                                                                                                |     |
+| Mutator                      | 加载指定变异器的包。                                       | ✔️               |                 | 更多信息请见[此处](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Mutators/)和[此处](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Mutators/MutatorsInBlueprints/)。 |     |
+| BugLoc                       | 将玩家移动到指定位置。                                     | ✔️               |                 | 例如 BugLoc=(X=1798.8569,Y=475.9513,Z=-8.8500)                                                                                                                                                          |     |
+| BugRot                       | 将玩家设置为指定的旋转。                                   | ✔️               |                 | 例如 BugRot=(Pitch=-1978,Yaw=-7197,Roll=0)                                                                                                                                                              |     |
+| CauseEvent                   | 在第一个 tick 后发出原因事件，为游戏提供生成玩家等的机会。 | ✔️               |                 |                                                                                                                                                                                                         |     |
+| InitialConnectTimeout        | 覆盖 NetDriver.InitialConnectTimeout。                     | ✔️               |                 |                                                                                                                                                                                                         |     |
+| ConnectTimeout               | 覆盖 NetDriver.ConnectTimeout。                            | ✔️               |                 |                                                                                                                                                                                                         |     |
+
+**注意：** 像控制台命令一样，选项不区分大小写。
+
+### 传递和解析数据
+
+无论你选择使用什么函数进行转移，都应该能够将**URL**作为参数传递。在原生代码中，该参数被称为：`URL`/`InURL`/`Cmd`。
+
+在蓝图中，有两个主要的函数驱动转移：
+
+- **OpenLevel**：
+
+![OpenLevel](https://wizardcell.com//assets/blog/persistent-data/open-level.png)
+
+原生函数是 `UGameplayStatics::OpenLevel()`。以下是它如何构建**URL**：
+
+GameplayStatics.cpp
+
+```c++
+void UGameplayStatics::OpenLevel(const UObject* WorldContextObject, FName LevelName, bool bAbsolute, FString Options)
+{
+    ...
+
+    const ETravelType TravelType = (bAbsolute ? TRAVEL_Absolute : TRAVEL_Relative);
+    FWorldContext &WorldContext = GEngine->GetWorldContextFromWorldChecked(World);
+    FString Cmd = LevelName.ToString();
+    if (Options.Len() > 0)
+    {
+        Cmd += FString(TEXT("?")) + Options;
+    }
+    FURL TestURL(&WorldContext.LastURL, *Cmd, TravelType);
+
+    ...
+}
+```
+
+现在我们得出结论，`Options` 参数对应于 `FURL.Op`。你也可以看到，不需要用 `?` 前置第一个选项，因为已经为你完成了。
+
+如前所述，`bAbsolute = true` 为默认值，它会重置我们曾经使用过的 `Options` 字符串，否则它会从之前的关卡带走，即，我们现在传递的 `Options` 字符串被追加到它后面（关于[这个谜题](https://wizardcell.com/unreal/persistent-data/#the-enigmas)更多信息见下文）。
+
+- **ExecuteConsoleCommand**：
+
+![ExecuteConsoleCommand](https://wizardcell.com//assets/blog/persistent-data/execute-console-command.png)
+
+对于转移，`Command` 通常是这样的：`<TravelCommand> <MapName><OptionsString>`。
+例如：`ServerTravel MyMap?Listen?Game=MyGameMode`。
+
+**注意：** `OptionsString` 被追加到 `MapName`。它以字符 `?` 开头。
+
+但是，等等，每次我们进行转移时都必须对 `Options` 字符串进行硬编码，这真的理智吗？显然不是。感谢 [Cedric](https://cedric-neukirchen.net/) 引起了我对以下函数的注意：
+
+LocalPlayer.h
+
+```c++
+/**
+ * 检索此玩家的任何特定于游戏的登录选项
+ * 如果此函数返回一个非空字符串，则返回的选项或选项将添加
+ * 传递到关卡加载和连接代码。选项采用 URL 格式，
+ * key=value，多个选项用 & 连接在一起
+ *
+ * @return 此游戏的 URL 选项或选项，否则为空字符串
+ */
+virtual FString GetGameLoginOptions() const { return TEXT(""); }
+```
+
+此函数允许你集中硬编码的 `Options` 字符串，这样，你所需要做的就是调用它来检索挂起转移的 `Options` 字符串。请注意，你必须添加你自己的**LocalPlayer**类，并在`项目设置->常规设置->默认类`内部设置它，然后你就可以覆盖该函数了。
+
+要解析选项字符串，你可以使用 [几个函数](https://docs.unrealengine.com/en-US/BlueprintAPI/GameOptions/)。
+
+**提示：** 请参阅[前面提到的](https://wizardcell.com/unreal/persistent-data/#native-travel-drivers)原生函数，以原生方式执行此操作。
+
+### 谜团
+
+一路上我遇到了两个谜题：
+
+**(1)** 你可能已经注意到，**GameMode** 缓存了选项字符串：
+
+GameModeBase.h
+
+```c++
+/** 保存选项字符串并在需要时解析它 */
+UPROPERTY(BlueprintReadOnly, Category=GameMode)
+FString OptionsString;
+```
+
+首先在我脑海中浮现的问题是：“考虑到**GameMode**类仅存在于服务器上，这个字符串是如何按连接缓存的？”
+
+当地图第一次加载时，会调用以下函数：
+
+GameModeBase.cpp
+
+```c++
+void AGameModeBase::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+    ...
+
+    // 保存选项以备将来使用
+    OptionsString = Options;
+
+    ...
+}
+```
+
+考虑到这是缓存 `AGameModeBase.OptionsString` 的唯一位置，我们得出结论：
+
+- 如果是**监听服务器**设置：`OptionsString` 属于主机玩家。
+
+例如，假设一个玩家正在托管一个地图，即，作为监听服务器加载。他可能希望使用设置的参数调用以下函数：
+
+![OpenLevelListen](https://wizardcell.com//assets/blog/persistent-data/open-level-listen.png)
+
+考虑到他是第一次加载地图的人，那么 `OptionsString` 等于传递的参数 `Options`。其他加入地图的玩家不会影响它。那么他们的选项字符串在哪里缓存？
+
+答案在于[连接过程](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Networking/Server/#connectionprocess)。任何尝试加入服务器的客户端都会调用 `AGameModeBase::PreLogin(const FString& Options, ...)`，该函数将选项字符串作为参数传递。进一步调用的函数之一如下所示：
+
+GameModeBase.h
+
+```c++
+/**
+ * 根据 URL 选项自定义传入的玩家
+ *
+ * @param NewPlayerController 登录的玩家
+ * @param UniqueId 此玩家的唯一 id
+ * @param Options 在登录时传入的 URL 选项
+ *
+ */
+virtual FString InitNewPlayer(APlayerController* NewPlayerController, const FUniqueNetIdRepl& UniqueId, const FString& Options, const FString& Portal = TEXT(""));
+```
+
+通过查看它的实现，你将了解对于客户端来说，选项字符串被解析但没有被缓存。我将让你看看它是如何解析**URL**选项的。
+
+**注意：** 仅在进行**硬**转移时才调用 `AGameModeBase::InitNewPlayer()` 和登录函数（`AGameModeBase::PreLogin()`/`AGameModeBase::Login()`）。对于尝试加入服务器的客户端连接，将调用 `AGameModeBase::PreLogin()`。对于每个被接受的客户端连接，包括监听服务器连接，如果存在这样的连接，将调用 `AGameModeBase::Login()`。
+
+- 如果是**专用服务器**设置：选项字符串属于服务器。对于客户端来说，它有所不同，具体取决于它们使用什么转移命令进行转移。例如，`ServerTravel` 使用与服务器相同的选项字符串转移所有客户端。如果你希望能够传递不同的选项字符串，则需要使用 `Travel` 或 `Open` 命令。
+
+**(2)** 正如我们之前说过几次，根据 [转移类型](https://wizardcell.com/unreal/persistent-data/#travel-types)，选项字符串可能会被重置。这究竟意味着什么？
+
+让我们看回之前的示例：一个玩家正在托管一个地图，即，作为监听服务器加载。他可能希望使用设置的参数调用以下函数：
+
+![OpenLevelListen](https://wizardcell.com//assets/blog/persistent-data/open-level-listen.png)
+
+正如你所看到的，`bAbsolute = true`，这意味着转移类型为 `TRAVEL_Absolute`，并且我们已经说过这意味着整个上次**URL**被忽略，包括选项字符串。在我们的例子中，这是否意味着忽略了 `Options` 字符串参数？
+
+答案显然是否定的，没有忽略 `Options`。原因在于**最后一个 URL**被忽略了，而 `Options` 是我们正在使用的**当前 URL**的一部分。它也没有意义，因为它被忽略/重置，否则我们将根本无法托管地图。
+
+为了全面了解情况，你将不得不查看以下结构：
+
+Engine.h
+
+```c++
+USTRUCT()
+struct FWorldContext
+{
+    GENERATED_USTRUCT_BODY()
+
+    ...
+
+    /** 转移到挂起的客户端连接的 URL */
+    FString TravelURL;
+
+    /** 挂起客户端连接的 TravelType */
+    uint8 TravelType;
+
+    /** 我们上次转移时的 URL */
+    UPROPERTY()
+    struct FURL LastURL;
+
+    /** 我们连接到的最后一个服务器 (用于 "reconnect" 命令) */
+    UPROPERTY()
+    struct FURL LastRemoteURL;
+
+    ...
+};
+```
+
+如你所见，`FWorldContext.LasURL` 是最后一个**URL**，而 `FWorldContext.TravelURL` 是当前的 URL（客户端正在转移的 URL）。有关该结构体的文档，可以在[此处](https://github.com/EpicGames/UnrealEngine/blob/d9d435c9c280b99a6c679b517adedd3f4b02cfd7/Engine/Source/Runtime/Engine/Classes/Engine/Engine.h#L266)找到。
+
+现在，例如，在我们转移到 `MyMap` 之后，我们以这种方式转移到 `MyOtherMap`：
+
+![OpenLevelRelative](https://wizardcell.com//assets/blog/persistent-data/open-level-relative.png)
+
+请注意，这次 `bAbsolute = false`，这意味着转移类型为 `TRAVEL_Relative`。如前所述，这意味着保留了最后一个**URL**（我们仍在同一服务器上），并且也保留了最后一个选项字符串，该字符串被添加到我们正在转移的当前选项字符串的前面。因此，新的选项字符串将如下所示：`?MaxPlayers=3?Listen?Name=MyAwesomeName`。
+
+你可能已经注意到，字符串的开头缺少一个 `?Listen`。原因在于，引擎为了防止我们犯错，所以移除了它：
+
+UnrealEngine.cpp
+
+```c++
+void UEngine::SetClientTravel( UWorld *InWorld, const TCHAR* NextURL, ETravelType InTravelType )
+{
+    FWorldContext &Context = GetWorldContextFromWorldChecked(InWorld);
+
+    // 设置 TravelURL。将在 UGameEngine::Tick() 中的下一个 tick 上安全地处理。
+    Context.TravelURL    = NextURL;
+    Context.TravelType   = InTravelType;
+
+    // 防止游戏崩溃，因为试图连接到自己的监听服务器
+    if ( Context.LastURL.HasOption(TEXT("Listen")) )
+    {
+        Context.LastURL.RemoveOption(TEXT("Listen"));
+    }
+}
+```
+
+对于所有类型的转移（包括断开连接，实际上也是转移），对于转移的任何客户端（包括作为主机的客户端），都会调用此函数。
+
+### 用法
+
+- 在转移时（无论转移类型如何）持久化基本数据类型。
+- 在第一次加载时将数据传递给服务器（**硬**转移）。
+- 快速测试。
+
+### 用法示例
+
+- 以下是通过命令行启动独立版本的示例：
+
+UnrealEngine.cpp
+
+```c++
+MyGame.exe /Game/Maps/MyMap
+UnrealEditor.exe MyGame.uproject /Game/Maps/MyMap?game=MyGameMode -game
+UnrealEditor.exe MyGame.uproject /Game/Maps/MyMap?listen -server
+MyGame.exe 127.0.0.1
+```
+
+- 以下是玩家托管地图（通过按 1）并且另一个玩家加入他（通过按 2）的示例：
+
+![HostAndJoin](https://wizardcell.com//assets/blog/persistent-data/host-and-join.png)
+
+```
+
+```
