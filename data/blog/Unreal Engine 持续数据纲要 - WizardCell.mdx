@@ -2,7 +2,7 @@
 title: Unreal Engine 持续数据纲要 - WizardCell
 date: 2025-03-18
 lastmod: 2025-03-18
-tags: ['UE', 'C++', '教程']
+tags: ['UE', 'cpp', '教程']
 draft: false
 summary: ' Unreal Engine 跨关卡和断开连接时如何持久化数据'
 images:
@@ -40,7 +40,7 @@ canonicalUrl:
 
 EngineBaseTypes.h
 
-```c++
+```cpp
 // 从服务器到服务器的转移。
 UENUM()
 enum ETravelType
@@ -203,7 +203,7 @@ BaseInput.ini
 
 GameModeBase.cpp
 
-```c++
+```cpp
 void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList)
 {
     // 获取我们即将一次性添加的元素的分配
@@ -238,7 +238,7 @@ void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor
 
     World.cpp
 
-    ```c++
+    ```cpp
     UWorld* FSeamlessTravelHandler::Tick()
     {
      ...
@@ -251,15 +251,14 @@ void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor
 
      ...
     }
+    
+    void UWorld::CopyGameState(AGameModeBase*FromGameMode, AGameStateBase* FromGameState)
+    {
+    AuthorityGameMode = FromGameMode；
+    SetGameState(FromGameState);
+    }
     ```
 
-void UWorld::CopyGameState(AGameModeBase*FromGameMode, AGameStateBase* FromGameState)
-{
-AuthorityGameMode = FromGameMode;
-SetGameState(FromGameState);
-}
-
-````
 
 4.  即使我们同时保留**GameMode**和**GameState**，我们的游戏也会冻结，并且无法解冻，除非我们重新连接我们的客户端。
 
@@ -286,7 +285,7 @@ SetGameState(FromGameState);
 
 World.cpp
 
-```c++
+```cpp
 UWorld* FSeamlessTravelHandler::Tick()
 {
     ...
@@ -344,7 +343,7 @@ UWorld* FSeamlessTravelHandler::Tick()
 
 GameModeBase.cpp
 
-```c++
+```cpp
 void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList)
 {
     // 获取我们即将一次性添加的元素的分配
@@ -360,7 +359,7 @@ void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor
 
 PlayerController.cpp
 
-```c++
+```cpp
 void APlayerController::GetSeamlessTravelActorList(bool bToEntry, TArray<AActor*>& ActorList)
 {
     if (MyHUD != NULL)
@@ -391,7 +390,7 @@ void APlayerController::GetSeamlessTravelActorList(bool bToEntry, TArray<AActor*
 
 World.cpp
 
-```c++
+```cpp
 UWorld* FSeamlessTravelHandler::Tick()
 {
     ...
@@ -441,7 +440,7 @@ UWorld* FSeamlessTravelHandler::Tick()
 
 PlayerController.cpp
 
-```c++
+```cpp
 void APlayerController::GetSeamlessTravelActorList(bool bToEntry, TArray<AActor*>& ActorList)
 {
     if (MyHUD != NULL)
@@ -476,7 +475,7 @@ void APlayerController::GetSeamlessTravelActorList(bool bToEntry, TArray<AActor*
 
 UserWidget.h
 
-```c++
+```cpp
 /**
  * 当一个顶级小部件在视口中并且世界可能要结束时调用。当这种情况发生时，
  * 在屏幕上保留小部件是不安全的。当发生这种情况时，我们会自动删除它们并将其标记为待销毁。
@@ -486,7 +485,7 @@ virtual void OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld);
 
 UserWidget.cpp
 
-```c++
+```cpp
 void UUserWidget::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
 {
     // 如果 InLevel 为空，则表示整个世界即将消失，所以
@@ -526,7 +525,7 @@ void UUserWidget::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
 
 以下是断开连接的玩家的调用堆栈（按顺序），直到他的数据被保存：
 
-```c++
+```cpp
 1. APlayerController::Destroyed()
 2. AController::Destroyed()
 3. AGameMode::LogOut()
@@ -543,7 +542,7 @@ void UUserWidget::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
 1.  他的**Pawn**从**PlayerController**中取消拥有并被销毁，在 `APlayerController::PawnLeavingGame()` 内部。**SpectatorPawn**，**HUD** 和**PlayerCameraManager**也被销毁。
 2.  生成一个新的“副本”**PlayerState**，并且在原生和蓝图 `CopyProperties()` 函数中指定的数据将从旧的原始**PlayerState**复制到新创建的**PlayerState**。覆盖其中一个，并相应地决定要复制什么数据。以下是默认复制的数据：
     PlayerState.cpp
-    ```c++
+    ```cpp
     void APlayerState::CopyProperties(APlayerState* PlayerState)
     {
      PlayerState->SetScore(GetScore());
@@ -578,7 +577,7 @@ void UUserWidget::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
 
 PlayerState.h
 
-```c++
+```cpp
 /** 当拥有玩家已断开连接时，在服务器上调用，默认情况下，此方法销毁此玩家状态 */
 virtual void OnDeactivated();
 ````
@@ -593,7 +592,7 @@ virtual void OnDeactivated();
 
 PlayerState.h
 
-```c++
+```cpp
 // 断开连接的英雄的非 PlayerState 相关数据将存储在此处
 USTRUCT()
 struct FDisconnectedHeroData
@@ -630,7 +629,7 @@ public:
 
 PlayerController.cpp
 
-```c++
+```cpp
 void APlayerController::Destroyed()
 {
     if (GetPawn() != NULL)
@@ -656,7 +655,7 @@ void APlayerController::Destroyed()
 
 MyPlayerController.cpp
 
-```c++
+```cpp
 void AMyPlayerController::Destroyed()
 {
     if (GetSpectatorPawn() != NULL)
@@ -695,14 +694,14 @@ void AMyPlayerController::Destroyed()
 
 MyGameMode.h
 
-```c++
+```cpp
 /** 将 PlayerState 添加到不活动列表，从活动列表中删除 */
 virtual void AddInactivePlayer(APlayerState* PlayerState, APlayerController* PC) override;
 ```
 
 MyGameMode.cpp
 
-```c++
+```cpp
 void AMyGameMode::AddInactivePlayer(APlayerState* PlayerState, APlayerController* PC)
 {
     check(PlayerState)
@@ -775,7 +774,7 @@ void AMyGameMode::AddInactivePlayer(APlayerState* PlayerState, APlayerController
 
 MyPlayerState.cpp
 
-```c++
+```cpp
 void AMyPlayerState::OnDeactivated()
 {
     if (const AMyPawn* MyPawn = GetPawn<AMyPawn>())
@@ -804,7 +803,7 @@ void AMyPlayerState::OnDeactivated()
 
 MyPlayerState.h
 
-```c++
+```cpp
 private:
 /** 表示此 PlayerState 属于重新连接的玩家 */
 uint8 bIsReconnecting:1;
@@ -822,7 +821,7 @@ virtual void OnReactivated() override;
 
 MyPlayerState.cpp
 
-```c++
+```cpp
 void AMyPlayerState::OnReactivated()
 {
     bIsReconnecting = true;
@@ -833,14 +832,14 @@ void AMyPlayerState::OnReactivated()
 
 MyGameMode.h
 
-```c++
+```cpp
 /** 尝试生成玩家的 pawn，如果他在重新连接，则在他的旧位置生成，或者在他的 FindPlayerStart 返回的位置生成 */
 virtual void RestartPlayer(AController* NewPlayer) override;
 ```
 
 MyGameMode.cpp
 
-```c++
+```cpp
 void AMyGameMode::RestartPlayer(AController* NewPlayer)
 {
     if (NewPlayer == nullptr || NewPlayer->IsPendingKillPending())
@@ -877,7 +876,7 @@ void AMyGameMode::RestartPlayer(AController* NewPlayer)
 
 以下是重新连接的玩家的调用堆栈（按顺序），直到他的数据被覆盖：
 
-```c++
+```cpp
 1. UWorld::SpawnPlayActor()
 2. AGameMode::Login(), AGameMode::PostLogin()
 3. AGameMode::FindInactivePlayer()
@@ -895,7 +894,7 @@ void AMyGameMode::RestartPlayer(AController* NewPlayer)
 
 PlayerState.h
 
-```c++
+```cpp
 /*
  * 可以在蓝图子类中实现，用于在重新连接时将更多属性从旧的 PlayerState 移动到新的 PlayerState
  *
@@ -909,7 +908,7 @@ void ReceiveOverrideWith(APlayerState* OldPlayerState);
 
 PlayerState.cpp
 
-```c++
+```cpp
 void APlayerState::OverrideWith(APlayerState* PlayerState)
 {
     SetIsSpectator(PlayerState->IsSpectator());
@@ -932,7 +931,7 @@ void APlayerState::OverrideWith(APlayerState* PlayerState)
 
 UnrealEngine.cpp
 
-```c++
+```cpp
 bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
 {
     ...
@@ -1060,7 +1059,7 @@ bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
 
 MyPlayerState.h
 
-```c++
+```cpp
 // 无缝转移英雄的非 PlayerState 相关数据将存储在此处
 USTRUCT()
 struct FSeamlessTraveledHeroData
@@ -1103,7 +1102,7 @@ public:
 
 PlayerState.h
 
-```c++
+```cpp
 /** 复制需要在不活动 PlayerState 中保存的属性 */
 virtual void CopyProperties(APlayerState* PlayerState);
 ```
@@ -1112,7 +1111,7 @@ virtual void CopyProperties(APlayerState* PlayerState);
 
 MyPlayerState.cpp
 
-```c++
+```cpp
 void AMyPlayerState::CopyProperties(APlayerState* PlayerState)
 {
     Super::CopyProperties(PlayerState); // 这被调用了，因此我们保留了默认情况下选择保留的数据
@@ -1135,7 +1134,7 @@ void AMyPlayerState::CopyProperties(APlayerState* PlayerState)
 
 PlayerState.cpp
 
-```c++
+```cpp
 void APlayerState::Reset()
 {
     Super::Reset();
@@ -1150,7 +1149,7 @@ void APlayerState::Reset()
 
 PlayerState.cpp
 
-```c++
+```cpp
 void AMyPlayerState::Reset()
 {
     Super::Reset(); // 这被调用了，因此我们重置了默认情况下选择重置的数据，例如，Score
@@ -1190,7 +1189,7 @@ void AMyPlayerState::Reset()
 
 GameModeBase.h
 
-```c++
+```cpp
 /**
  * 用于在无缝转移时交换视口/连接的 PlayerControllers，并且新的 GameMode 的
  * 控制器类与之前的不同
@@ -1205,7 +1204,7 @@ virtual void SwapPlayerControllers(APlayerController* OldPC, APlayerController* 
 
 GameModeBase.cpp
 
-```c++
+```cpp
 void AGameModeBase::SwapPlayerControllers(APlayerController*OldPC, APlayerController* NewPC)
 {
     if (IsValid(OldPC) && IsValid(NewPC) && OldPC->Player != nullptr)
@@ -1231,7 +1230,7 @@ void AGameModeBase::SwapPlayerControllers(APlayerController*OldPC, APlayerContro
 
 GameModeBase.h
 
-```c++
+```cpp
 /** 在无缝转移期间将 PlayerController 交换为新的 PlayerController 时调用 */
 UFUNCTION(BlueprintImplementableEvent, Category=Game, meta=(DisplayName="OnSwapPlayerControllers", ScriptName="OnSwapPlayerControllers"))
 void K2_OnSwapPlayerControllers(APlayerController* OldPC, APlayerController* NewPC);
@@ -1247,7 +1246,7 @@ void K2_OnSwapPlayerControllers(APlayerController* OldPC, APlayerController* New
 
 GameModeBase.h
 
-```c++
+```cpp
 /**
  * 在服务器端调用，在无缝关卡过渡期间获取应该移动到新关卡的 Actors 列表
  * PlayerControllers，Role < ROLE_Authority Actors，以及任何位于列表中 Actor
@@ -1291,7 +1290,7 @@ virtual void GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& Act
 
 TeamSetup.h
 
-```c++
+```cpp
 USTRUCT()
 struct FTeamInfo
 {
@@ -1328,7 +1327,7 @@ public:
 
 TeamSetup.cpp
 
-```c++
+```cpp
 ATeamSetup::ATeamSetup(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer.DoNotCreateDefaultSubobject(TEXT("Sprite")))
 {
@@ -1341,7 +1340,7 @@ ATeamSetup::ATeamSetup(const FObjectInitializer& ObjectInitializer)
 
 BaseGameMode.h
 
-```c++
+```cpp
 /** 用于设置团队并将团队相关信息复制到所有客户端 */
 UPROPERTY(Transient)
 TObjectPtr<ATeamSetup> TeamSetup;
@@ -1351,7 +1350,7 @@ virtual void GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& Act
 
 BaseGameMode.cpp
 
-```c++
+```cpp
 void ABaseGameMode::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList)
 {
     Super::GetSeamlessTravelActorList(bToTransition, ActorList);
@@ -1362,7 +1361,7 @@ void ABaseGameMode::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor
 
 LobbyGameMode.h
 
-```c++
+```cpp
 UCLASS()
 class ALobbyGameMode : public AGameMode
 {
@@ -1376,7 +1375,7 @@ public:
 
 LobbyGameMode.cpp
 
-```c++
+```cpp
 void ALobbyGameMode::PreInitializeComponents()
 {
     Super::PreInitializeComponents();
@@ -1394,7 +1393,7 @@ void ALobbyGameMode::PreInitializeComponents()
 
 CombatGameMode.h
 
-```c++
+```cpp
 UCLASS()
 class ACombatGameMode : public ABaseGameMode
 {
@@ -1412,7 +1411,7 @@ public:
 
 CombatGameMode.cpp
 
-```c++
+```cpp
 void ACombatGameMode::InitGameState()
 {
     Super::InitGameState();
@@ -1455,7 +1454,7 @@ void ACombatGameMode::InitGameState()
 我偶然发现了大量的示例，但以下是我建议的示例：
 
 - [保存和加载你的游戏（官方文档）](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/SaveGame/)
-- [虚幻引擎 C++ 保存系统 (Tom Looman 教程)](https://www.tomlooman.com/unreal-engine-cpp-save-system/)
+- [虚幻引擎 cpp 保存系统 (Tom Looman 教程)](https://www.tomlooman.com/unreal-engine-cpp-save-system/)
 - [SPUD：Steve 的持久虚幻数据库（完整的保存系统插件）](https://github.com/sinbad/SPUD)
 
 ## 7. 游戏选项字符串
@@ -1474,7 +1473,7 @@ void ACombatGameMode::InitGameState()
 
 EngineBaseTypes.h
 
-```c++
+```cpp
 // URL 结构。
 USTRUCT()
 struct ENGINE_API FURL
@@ -1591,7 +1590,7 @@ struct ENGINE_API FURL
 
 GameplayStatics.cpp
 
-```c++
+```cpp
 void UGameplayStatics::OpenLevel(const UObject* WorldContextObject, FName LevelName, bool bAbsolute, FString Options)
 {
     ...
@@ -1626,7 +1625,7 @@ void UGameplayStatics::OpenLevel(const UObject* WorldContextObject, FName LevelN
 
 LocalPlayer.h
 
-```c++
+```cpp
 /**
  * 检索此玩家的任何特定于游戏的登录选项
  * 如果此函数返回一个非空字符串，则返回的选项或选项将添加
@@ -1652,7 +1651,7 @@ virtual FString GetGameLoginOptions() const { return TEXT(""); }
 
 GameModeBase.h
 
-```c++
+```cpp
 /** 保存选项字符串并在需要时解析它 */
 UPROPERTY(BlueprintReadOnly, Category=GameMode)
 FString OptionsString;
@@ -1664,7 +1663,7 @@ FString OptionsString;
 
 GameModeBase.cpp
 
-```c++
+```cpp
 void AGameModeBase::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
     ...
@@ -1690,7 +1689,7 @@ void AGameModeBase::InitGame(const FString& MapName, const FString& Options, FSt
 
 GameModeBase.h
 
-```c++
+```cpp
 /**
  * 根据 URL 选项自定义传入的玩家
  *
@@ -1722,7 +1721,7 @@ virtual FString InitNewPlayer(APlayerController* NewPlayerController, const FUni
 
 Engine.h
 
-```c++
+```cpp
 USTRUCT()
 struct FWorldContext
 {
@@ -1760,7 +1759,7 @@ struct FWorldContext
 
 UnrealEngine.cpp
 
-```c++
+```cpp
 void UEngine::SetClientTravel( UWorld *InWorld, const TCHAR* NextURL, ETravelType InTravelType )
 {
     FWorldContext &Context = GetWorldContextFromWorldChecked(InWorld);
@@ -1791,7 +1790,7 @@ void UEngine::SetClientTravel( UWorld *InWorld, const TCHAR* NextURL, ETravelTyp
 
 UnrealEngine.cpp
 
-```c++
+```cpp
 MyGame.exe /Game/Maps/MyMap
 UnrealEditor.exe MyGame.uproject /Game/Maps/MyMap?game=MyGameMode -game
 UnrealEditor.exe MyGame.uproject /Game/Maps/MyMap?listen -server
