@@ -12,19 +12,15 @@ layout: PostLayout
 canonicalUrl:
 ---
 
-> 原文：[Unreal Engine Persistent Data Compendium - WizardCell](https://wizardcell.com/unreal/persistent-data/)
-> **提示**：当前版本的 *无缝转移(Seamless Travel)* 与 *世界分区* 功能存在冲突，请关闭关卡的世界分区
-
+> 原文：[Unreal Engine Persistent Data Compendium - WizardCell](https://wizardcell.com/unreal/persistent-data/) > **提示**：当前版本的 _无缝转移(Seamless Travel)_ 与 _世界分区_ 功能存在冲突，请关闭关卡的世界分区
 
 我猜你已经在你的游戏里至少有两个关卡了，玩家们在其中一个关卡和另一个关卡之间转移。当玩家进入新关卡时，他们发现他们在旧关卡中拥有的数据已经简单地消失了。在其他情况下，由于一些恶劣的网络条件，玩家可能会与服务器断开连接并重新连接，如果处理不当，也会导致数据丢失！
 
-简介
-----
+## 简介
 
 在这篇文章中，我们将讨论虚幻引擎中的 **转移(travel)** 和 **断开连接(disconnect)**（实际上是一个未初始化的转移）场景。更重要的是，我们将探索几种方法使我们的数据在这些场景中持续存在。此外，我们将了解这些方法彼此之间的区别，以及在什么情况下我们应该选择其中一种。
 
-转移：无缝 vs. 硬
------------------
+## 转移：无缝 vs. 硬
 
 在虚幻引擎中，有两种主要的转移方式：**无缝**和**非无缝**，后者也被称为**硬**转移。主要区别在于，**无缝**转移是一个非阻塞操作，因为它使用了异步关卡加载，而**非无缝**转移则是一个阻塞调用，因为它使用了同步关卡加载。此外，在**非无缝**转移中，玩家会与服务器断开连接并在新的地图同步加载时重新连接，而在**无缝**转移中，玩家保持连接但会被转移到一个异步加载的[过渡地图](https://wizardcell.com/unreal/persistent-data/#enabling-seamless-travel-and-transition-map)，直到目标关卡也异步加载完毕。
 
@@ -32,9 +28,9 @@ canonicalUrl:
 
 **非无缝**转移必须在三种情况下发生：
 
-*   首次加载地图时
-*   作为客户端首次连接到服务器时（例如加入会话）
-*   当你想要结束一个多人游戏并开始一个新的游戏时
+- 首次加载地图时
+- 作为客户端首次连接到服务器时（例如加入会话）
+- 当你想要结束一个多人游戏并开始一个新的游戏时
 
 **注意：** 第一种方式并不意味着每次首次加载新地图，而是指最初连接加载的第一张地图。否则，这意味着，我们转移到的任何新地图最终都会变成**非无缝**转移，这是不正确的。
 
@@ -61,17 +57,17 @@ enum ETravelType
 
 让我们解释一下每种转移类型及其预期用途：
 
-*   **TRAVEL_Relative**（相同服务器，并保留最后一个 [选项字符串](https://wizardcell.com/unreal/persistent-data/#7-game-options-string)）：当前 [URL](https://wizardcell.com/unreal/persistent-data/#url-structure) 相对于上一个 URL，因此我们不会与服务器断开连接，这使得它非常适合**无缝**转移。因此，当客户端进行**无缝**转移时，这种转移类型是必需的。最后一个选项字符串会带到新关卡。
-*   **TRAVEL_Partial**（服务器重置，但保留最后一个选项字符串）：当前 URL 部分匹配上一个 URL，因此我们与服务器断开连接，这对应于**非无缝**转移。最后一个选项字符串会被带到新地图。
-*   **TRAVEL_Absolute**（服务器重置，并忽略最后一个选项字符串）：当前 URL 是绝对的，这意味着最后一个 URL（包括最后一个选项字符串）被清除，因此我们与服务器断开连接，这对应于**非无缝**转移。
+- **TRAVEL_Relative**（相同服务器，并保留最后一个 [选项字符串](https://wizardcell.com/unreal/persistent-data/#7-game-options-string)）：当前 [URL](https://wizardcell.com/unreal/persistent-data/#url-structure) 相对于上一个 URL，因此我们不会与服务器断开连接，这使得它非常适合**无缝**转移。因此，当客户端进行**无缝**转移时，这种转移类型是必需的。最后一个选项字符串会带到新关卡。
+- **TRAVEL_Partial**（服务器重置，但保留最后一个选项字符串）：当前 URL 部分匹配上一个 URL，因此我们与服务器断开连接，这对应于**非无缝**转移。最后一个选项字符串会被带到新地图。
+- **TRAVEL_Absolute**（服务器重置，并忽略最后一个选项字符串）：当前 URL 是绝对的，这意味着最后一个 URL（包括最后一个选项字符串）被清除，因此我们与服务器断开连接，这对应于**非无缝**转移。
 
 下面是一个总结表，显示了每种转移类型保留的内容（最后一个服务器 URL 和最后一个选项字符串），以及是否与**无缝**和**硬**转移兼容：
 
 | 转移类型 | 保留最后一个服务器 URL？ | 保留最后一个选项字符串？ | 支持无缝转移？ | 支持硬转移？ |
-| ---- | -------------- | ------------ | ------- | ------ |
-| 相对   | ✔️             | ✔️           | ✔️      | ✔️     |
-| 部分   |                | ✔️           |         | ✔️     |
-| 绝对   |                |              |         | ✔️     |
+| -------- | ------------------------ | ------------------------ | -------------- | ------------ |
+| 相对     | ✔️                       | ✔️                       | ✔️             | ✔️           |
+| 部分     |                          | ✔️                       |                | ✔️           |
+| 绝对     |                          |                          |                | ✔️           |
 
 ### 原生转移函数
 
@@ -79,24 +75,24 @@ enum ETravelType
 
 #### UEngine::Browse
 
-*   就像加载新地图时的硬重置。
-*   将始终导致非无缝转移。
-*   将在转移到目标地图之前导致服务器断开当前客户端的连接。
-*   客户端将与当前服务器断开连接。
-*   专用服务器无法转移到其他服务器，因此地图必须是本地的（不能是 URL）。
+- 就像加载新地图时的硬重置。
+- 将始终导致非无缝转移。
+- 将在转移到目标地图之前导致服务器断开当前客户端的连接。
+- 客户端将与当前服务器断开连接。
+- 专用服务器无法转移到其他服务器，因此地图必须是本地的（不能是 URL）。
 
 #### UWorld::ServerTravel
 
-*   仅用于服务器。
-*   将服务器跳到新的世界/关卡。
-*   所有连接的客户端都将跟随。
-*   这是多人游戏从地图到地图转移的方式，服务器是负责调用此函数的。
-*   服务器将为所有已连接的客户端玩家调用 `APlayerController::ClientTravel()`。
+- 仅用于服务器。
+- 将服务器跳到新的世界/关卡。
+- 所有连接的客户端都将跟随。
+- 这是多人游戏从地图到地图转移的方式，服务器是负责调用此函数的。
+- 服务器将为所有已连接的客户端玩家调用 `APlayerController::ClientTravel()`。
 
 #### APlayerController::ClientTravel
 
-*   如果从客户端调用，将转移到新的服务器。
-*   如果从服务器调用，将指示特定客户端转移到新地图（但保持连接到当前服务器）。
+- 如果从客户端调用，将转移到新的服务器。
+- 如果从服务器调用，将指示特定客户端转移到新地图（但保持连接到当前服务器）。
 
 ### 蓝图转移函数
 
@@ -104,13 +100,13 @@ enum ETravelType
 
 #### OpenLevel
 
-*   此函数将始终导致**硬**转移（即使**无缝**转移已[启用](https://wizardcell.com/unreal/persistent-data/#enabling-seamless-travel-and-transition-map)。如果从客户端调用，将转移到新的服务器，而不会断开其他客户端与服务器的连接。如果从监听服务器调用，将使监听服务器玩家转移到新地图，将客户端断开连接到入口/默认地图。如果从专用服务器调用，将导致转移失败，将客户端断开连接到默认地图，除非转移 URL 具有选项“listen”，这将指示特定客户端转移到新地图作为监听服务器，但是，其他客户端将断开连接回到默认地图。它对应于原生函数 `UGameplayStatics::OpenLevel()`，它调用 `UEngine::SetClientTravel()`。在下一个 tick 上，`UGameEngine::Tick()` 调用 `UEngine::Browse()`，它调用 `UEngine::LoadMap()`。默认情况下 `bAbsolute = true`，使其成为**绝对**转移，否则，是**相对**转移。
+- 此函数将始终导致**硬**转移（即使**无缝**转移已[启用](https://wizardcell.com/unreal/persistent-data/#enabling-seamless-travel-and-transition-map)。如果从客户端调用，将转移到新的服务器，而不会断开其他客户端与服务器的连接。如果从监听服务器调用，将使监听服务器玩家转移到新地图，将客户端断开连接到入口/默认地图。如果从专用服务器调用，将导致转移失败，将客户端断开连接到默认地图，除非转移 URL 具有选项“listen”，这将指示特定客户端转移到新地图作为监听服务器，但是，其他客户端将断开连接回到默认地图。它对应于原生函数 `UGameplayStatics::OpenLevel()`，它调用 `UEngine::SetClientTravel()`。在下一个 tick 上，`UGameEngine::Tick()` 调用 `UEngine::Browse()`，它调用 `UEngine::LoadMap()`。默认情况下 `bAbsolute = true`，使其成为**绝对**转移，否则，是**相对**转移。
 
 **注意：** 应该避免在 PIE 中测试转移（以及更多网络功能），因为这可能会导致你的编辑器崩溃，并且不会反映你的代码在实时中的功能。坚持在独立/打包游戏中转移！
 
 #### ExecuteConsoleCommand
 
-*   此函数和 `Command` 参数可以是 `ServerTravel <MapName>` 或 `Travel <MapName>`（前者通常使用，因为它可以是**无缝**的，而后者不行），它们将转移到指定的地图，并传递先前设置的选项字符串，因为它们分别是**相对**和**部分**转移。它们分别对应于原生函数：`UEngine::HandleServerTravelCommand()` 和 `UEngine::HandleTravelCommand()`。你可以使用的另一个命令是 `Open <MapName>`，它会打开指定的地图，而不会传递先前设置的选项字符串，因为它是一个**绝对**转移。它对应于原生函数 `UEngine::HandleOpenCommand()`，该函数调用 `UEngine::SetClientTravel()`。在下一个 tick 上，`UGameEngine::Tick()` 调用 `UEngine::Browse()`，它调用 `UEngine::LoadMap()`。它始终是一个**绝对**转移。
+- 此函数和 `Command` 参数可以是 `ServerTravel <MapName>` 或 `Travel <MapName>`（前者通常使用，因为它可以是**无缝**的，而后者不行），它们将转移到指定的地图，并传递先前设置的选项字符串，因为它们分别是**相对**和**部分**转移。它们分别对应于原生函数：`UEngine::HandleServerTravelCommand()` 和 `UEngine::HandleTravelCommand()`。你可以使用的另一个命令是 `Open <MapName>`，它会打开指定的地图，而不会传递先前设置的选项字符串，因为它是一个**绝对**转移。它对应于原生函数 `UEngine::HandleOpenCommand()`，该函数调用 `UEngine::SetClientTravel()`。在下一个 tick 上，`UGameEngine::Tick()` 调用 `UEngine::Browse()`，它调用 `UEngine::LoadMap()`。它始终是一个**绝对**转移。
 
 幸运的是，当运行时在**控制台命令**中键入这些命令时，它们会自动完成：
 
@@ -136,8 +132,7 @@ BaseInput.ini
 
 **注意：** 5.1 之前，单进程 PIE（编辑器内游玩）中不支持无缝转移。因此，你必须关闭 [`Run Under One Process`](https://docs.unrealengine.com/en-US/BuildingWorlds/LevelEditor/InEditorTesting/NetworkedPlayInEditor/#advancedsettings) 设置，或启动一个独立游戏（右键单击你的 .uproject 并 `Launch game`），或启动一个打包构建。自 5.1 以来，单进程 PIE 中支持无缝转移，但你需要启用[CVar](https://docs.unrealengine.com/en-US/console-varaibles-cplusplus-in-unreal-engine/) `net.AllowPIESeamlessTravel`，从控制台命令，因为默认情况下它是禁用的。
 
-[GameFramework](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Framework/) 对象
----------------------------------------------------------------------------------------------------
+## [GameFramework](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Framework/) 对象
 
 了解 [虚幻引擎游戏框架对象](https://www.tomlooman.com/unreal-engine-gameplay-framework/)、它们的创建顺序、调用和空间是非常重要的。这将帮助我们解决一系列问题，这些问题不一定只与持久化数据相关。
 
@@ -184,8 +179,7 @@ BaseInput.ini
 
 **注意：** 通常，这些**Actor**类在两个不同的地图之间是不同的（源地图和目标地图）；因此，如果我们想要持久化数据，我们需要让这两个子**Actor**类从一个共享的父**Actor**类继承，该父**Actor**类包含共享数据。
 
-在无缝转移中持久化数据
---------------------
+## 在无缝转移中持久化数据
 
 事实上，转移会销毁我们的大部分**对象**，这使得持久化运行时数据的过程变得困难。尽管如此，在这种情况下，**无缝**转移可以使持久化数据更容易。
 
@@ -200,10 +194,10 @@ BaseInput.ini
 
 当我们**无缝**转移时，这些**对象**将默认持久化到过渡地图：
 
-*   **GameMode**
-*   **GameSession**
-*   **GameState**
-*   任何在前面提到的任何**Actors**内部的非 Actor **对象**（即 `Object.Outer == Actor`）
+- **GameMode**
+- **GameSession**
+- **GameState**
+- 任何在前面提到的任何**Actors**内部的非 Actor **对象**（即 `Object.Outer == Actor`）
 
 请参阅下面的函数以供参考：
 
@@ -241,31 +235,31 @@ void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor
 1.  没有理由在**GameMode**中持久化运行时数据，因为这个类定义了在编译时设置的游戏规则。
 2.  **GameMode**类通常在两个不同的关卡之间变化，因此保留相同的**Actor**是一个坏主意。
 3.  保留这些类中的一个而不保留其他类就像掉进了兔子洞。例如，保留**GameMode**而不保留**GameState**会导致服务器关闭，因为这两个类是耦合的，你可以在这里看到：
-    
+
     World.cpp
-    
-  ```cpp
- UWorld* FSeamlessTravelHandler::Tick()
- {
-     ...
 
-     if (KeptGameMode)
-     {
-         LoadedWorld->CopyGameState(KeptGameMode, KeptGameState);
-         bCreateNewGameMode = false;
-     }
+```cpp
+UWorld* FSeamlessTravelHandler::Tick()
+{
+   ...
 
-     ...
- }
+   if (KeptGameMode)
+   {
+       LoadedWorld->CopyGameState(KeptGameMode, KeptGameState);
+       bCreateNewGameMode = false;
+   }
 
- void UWorld::CopyGameState(AGameModeBase*FromGameMode, AGameStateBase* FromGameState)
- {
-     AuthorityGameMode = FromGameMode;
-     SetGameState(FromGameState);
- }
+   ...
+}
+
+void UWorld::CopyGameState(AGameModeBase*FromGameMode, AGameStateBase* FromGameState)
+{
+   AuthorityGameMode = FromGameMode;
+   SetGameState(FromGameState);
+}
 
 ```
-    
+
 4.  即使我们同时保留**GameMode**和**GameState**，我们的游戏也会冻结，并且无法解冻，除非我们重新连接我们的客户端。
 
 **提示：** 不要使用这些**Actor**类持久化运行时数据：**GameMode**、**GameState**和**GameSession**。
@@ -274,16 +268,16 @@ void AGameModeBase::GetSeamlessTravelActorList(bool bToTransition, TArray<AActor
 
 默认情况下，以下**对象**将仅在**服务器**上持久化到目标地图，尽管有时它们会被销毁和重新创建。因此，我们必须将数据（更多内容见下文）复制到新创建的对象上。以下是列表：
 
-*   所有**PlayerStates**
-*   所有具有有效**PlayerState**的**Controllers**（包括使用**PlayerStates**的**AIControllers**）
-*   所有**PlayerControllers**
-*   监听服务器的**HUD**
-*   监听服务器的**PlayerCameraManager**
-*   所有监听服务器的**UserWidgets**
-*   任何通过 `APlayerController::GetSeamlessTravelActorList()` 添加的**Actors**，在监听服务器的**PlayerController**上调用
-*   任何通过 `AGameModeBase::GetSeamlessTravelActorList()` 添加的**Actors**
-*   任何在列表中**Actor**内部的非 Actor **对象**（即列表 `ActorList` 中的 `Object.Outer == Actor`）
-*   任何具有以下内容的**Actors**：`(Role < ROLE_Authority) && (NetDormancy < DORM_DormantAll) && (!IsNetStartupActor())`
+- 所有**PlayerStates**
+- 所有具有有效**PlayerState**的**Controllers**（包括使用**PlayerStates**的**AIControllers**）
+- 所有**PlayerControllers**
+- 监听服务器的**HUD**
+- 监听服务器的**PlayerCameraManager**
+- 所有监听服务器的**UserWidgets**
+- 任何通过 `APlayerController::GetSeamlessTravelActorList()` 添加的**Actors**，在监听服务器的**PlayerController**上调用
+- 任何通过 `AGameModeBase::GetSeamlessTravelActorList()` 添加的**Actors**
+- 任何在列表中**Actor**内部的非 Actor **对象**（即列表 `ActorList` 中的 `Object.Outer == Actor`）
+- 任何具有以下内容的**Actors**：`(Role < ROLE_Authority) && (NetDormancy < DORM_DormantAll) && (!IsNetStartupActor())`
 
 **注意：** 只有**PersistentLevel**中（已分配动态 [NetGUID](https://docs.unrealengine.com/en-US/API/Runtime/Core/Misc/FNetworkGUID/) 的）动态**Actors**（包括但不限于在游戏过程中生成的所有**Actors**）才可能持久化。
 
@@ -382,13 +376,13 @@ void APlayerController::GetSeamlessTravelActorList(bool bToEntry, TArray<AActor*
 
 默认情况下，以下**对象**将仅在**客户端**上持久化到目标地图，尽管有时它们会被销毁和重新创建。因此，我们必须将数据（更多内容见下文）复制到新创建的对象上。以下是列表：
 
-*   本地**PlayerController**
-*   **HUD**
-*   本地**PlayerCameraManager**
-*   所有**UserWidgets**
-*   任何通过 `APlayerController::GetSeamlessTravelActorList()` 添加的**Actors**，在本地**PlayerController**上调用
-*   任何在列表中**Actor**内部的非 Actor **对象**（即列表中的 `Object.Outer == Actor`）
-*   任何具有以下内容的**Actors**：`(Role < ROLE_Authority) && (NetDormancy < DORM_DormantAll) && (!IsNetStartupActor())`
+- 本地**PlayerController**
+- **HUD**
+- 本地**PlayerCameraManager**
+- 所有**UserWidgets**
+- 任何通过 `APlayerController::GetSeamlessTravelActorList()` 添加的**Actors**，在本地**PlayerController**上调用
+- 任何在列表中**Actor**内部的非 Actor **对象**（即列表中的 `Object.Outer == Actor`）
+- 任何具有以下内容的**Actors**：`(Role < ROLE_Authority) && (NetDormancy < DORM_DormantAll) && (!IsNetStartupActor())`
 
 **注意：** 只有**PersistentLevel**中的动态**Actors**才可能持久化。
 
@@ -523,8 +517,7 @@ void UUserWidget::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
 
 当发生**无缝**转移时，会有一小段时间，特定的**Object**类的旧实例和新实例都是活动的。在那段时间内，只有你选择从旧实例复制到新实例的数据才真正被保留。因此，旧的**Objects**并没有真正地持久化，而是我们选择保留的数据。但是，情况并非总是如此。例如，**UserWidgets**（以及任何具有持久 `Outer` 的非 Actor **对象**）确实在不需要复制数据的情况下真正持久化。同样适用于诸如**PlayerController**和**PlayerCameraManager**之类的类，但前提是新的**GameMode**的类是 `AGameMode` 的**子类**，并且它的**PlayerController**类与之前的**相同**。我们将在[解释](https://wizardcell.com/unreal/persistent-data/#5-getseamlesstravelactorlist)原因以及如何在幕后完成。更彻底的答案以及如何完成数据保存，可以在下一节中找到。
 
-在断开连接时持久化数据
-------------------
+## 在断开连接时持久化数据
 
 虽然现代互联网允许游戏玩家与世界各地的其他人连接，但互联网有时并不像我们希望的那么稳定。在多人游戏中，断开连接每天都在发生，如果不正确处理，玩家将遭受损失。断开连接然后重新连接[根据定义](https://wizardcell.com/unreal/persistent-data/#travel-seamless-vs-hard)是一个**硬**转移，这意味着我们缺少上面讨论的**无缝**转移持久化数据的优势。幸运的是，虚幻引擎已经内置了功能，可以开箱即用地处理断开连接然后重新连接的玩家的数据保存。要理解所有这些功能如何一起工作，我们首先应该了解引擎如何处理断开连接的玩家。
 
@@ -548,21 +541,21 @@ void UUserWidget::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
 
 1.  他的**Pawn**从**PlayerController**中取消拥有并被销毁，在 `APlayerController::PawnLeavingGame()` 内部。**SpectatorPawn**，**HUD** 和**PlayerCameraManager**也被销毁。
 2.  生成一个新的“副本”**PlayerState**，并且在原生和蓝图 `CopyProperties()` 函数中指定的数据将从旧的原始**PlayerState**复制到新创建的**PlayerState**。覆盖其中一个，并相应地决定要复制什么数据。以下是默认复制的数据：
-    
+
     PlayerState.cpp
-    
- ```cpp
- void APlayerState::CopyProperties(APlayerState* PlayerState)
- {
-     PlayerState->SetScore(GetScore());
-     PlayerState->SetCompressedPing(GetCompressedPing());
-     PlayerState->ExactPing = ExactPing;
-     PlayerState->SetPlayerId(GetPlayerId());
-     PlayerState->SetUniqueId(GetUniqueId());
-     PlayerState->SetPlayerNameInternal(GetPlayerName());
-     PlayerState->SetStartTime(GetStartTime());
-     PlayerState->SavedNetworkAddress = SavedNetworkAddress;
- }
+
+```cpp
+void APlayerState::CopyProperties(APlayerState* PlayerState)
+{
+    PlayerState->SetScore(GetScore());
+    PlayerState->SetCompressedPing(GetCompressedPing());
+    PlayerState->ExactPing = ExactPing;
+    PlayerState->SetPlayerId(GetPlayerId());
+    PlayerState->SetUniqueId(GetUniqueId());
+    PlayerState->SetPlayerNameInternal(GetPlayerName());
+    PlayerState->SetStartTime(GetStartTime());
+    PlayerState->SavedNetworkAddress = SavedNetworkAddress;
+}
 ```
 
 3.  然后，新的副本**PlayerState**被停用（不再复制），并且其生命周期设置为 `AGameMode.InactivePlayerStateLifeSpan`，默认情况下为 300 秒。如果玩家在此之前没有重新连接，他们不活动的存储副本**PlayerState**将被销毁，并且他将无法再次重新连接（因为他的 `UniqueId` 或 `SavedNetworkAddress` 丢失）。将 `InactivePlayerStateLifeSpan` 设置为 0 将清除计时器，并且不会销毁存储的副本**PlayerState**。不活动的**PlayerState**被添加到 `AGameMode.InactivePlayerArray` 中，这是一个属于已从服务器断开连接的玩家的**PlayerStates**数组，因此它们被保存以防它们重新连接。请注意，`AGameMode.MaxInactivePlayers` 确定在淘汰较早的玩家之前断开连接的玩家的最大数量。
@@ -577,9 +570,9 @@ void UUserWidget::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* InWorld)
 **(1)** 感谢我的朋友 [Zlo](https://www.linkedin.com/in/josip-duvancic-933934254/) 对第一个陷阱的见解。引用他：
 
 > 虽然看起来 `APlayerState::CopyProperties()` 是在断开连接时存储任何数据的函数，但事实上并非如此，因为你可能需要提取一些与 pawn 相关的数据，为了在重新连接时正确地恢复它，该函数无法做到这一点。
-> 
+>
 > 例如，假设你希望断开连接的 pawns 重新出现在它们断开连接的地方。这需要 **PlayerState** 知道 **Pawn** 的位置，在他断开连接时，它通常做不到。同样适用于你的库存或技能系统，即使你预先将它们放在 **PlayerState** 类中，`CopyProperties()` 仍然是一个问题。
-> 
+>
 > 为了使 `CopyProperties()` 起作用，**PlayerState** 必须已经拥有你需要的所有数据，并且出于断开连接的目的，它通常没有。因此，你需要一个在稍后时间点调用的函数。`APlayerState::OnDeactivated()` 就是这样的函数。
 
 PlayerState.h
@@ -956,23 +949,23 @@ bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
 }
 ```
 
-*   **DISCONNECT**：将客户端与当前游戏/服务器断开连接。它对应于原生函数 `UEngine::HandleDisconnectCommand()`，后者调用 `UEngine::HandleDisconnect()`。断开连接实际上是**绝对**或**部分**类型的转移（取决于断开连接的情况），这两种情况都会导致**硬**转移。
-*   **RECONNECT**：将客户端重新连接到当前游戏/服务器。它对应于原生函数 `UEngine::HandleReconnectCommand()`。断开连接实际上是**绝对**类型的转移，这将导致**硬**转移。
+- **DISCONNECT**：将客户端与当前游戏/服务器断开连接。它对应于原生函数 `UEngine::HandleDisconnectCommand()`，后者调用 `UEngine::HandleDisconnect()`。断开连接实际上是**绝对**或**部分**类型的转移（取决于断开连接的情况），这两种情况都会导致**硬**转移。
+- **RECONNECT**：将客户端重新连接到当前游戏/服务器。它对应于原生函数 `UEngine::HandleReconnectCommand()`。断开连接实际上是**绝对**类型的转移，这将导致**硬**转移。
 
 **注意：** 这些命令不像我们之前看到的与转移相关的命令那样自动完成，因为它们没有为其设置 `ManualAutoCompleteList`。
 
 以下是你可以在代码中选择执行上述功能的几个地方：
 
-*   `UKismetSystemLibrary::ExecuteConsoleCommand()` 原生函数（蓝图版本具有相同的名称），并且 `Command` 参数可以是 `DISCONNECT` 或 `RECONNECT`。
-*   `UGameInstance::Exec()` 函数和 `Cmd` 参数可以是 `DISCONNECT` 或 `RECONNECT`。
+- `UKismetSystemLibrary::ExecuteConsoleCommand()` 原生函数（蓝图版本具有相同的名称），并且 `Command` 参数可以是 `DISCONNECT` 或 `RECONNECT`。
+- `UGameInstance::Exec()` 函数和 `Cmd` 参数可以是 `DISCONNECT` 或 `RECONNECT`。
 
-持久运行时数据
----------------
+## 持久运行时数据
 
 幸运的是，在保存我们的数据以进行关卡更改或重新连接时，有多种选项可以考虑。请注意，每个选项中的**用法**部分反映了我自己的观点；因此，你可以偏离脚本。作为经验法则，我倾向于在服务器端存储服务器授权的数据，在客户端存储客户端授权的数据。但是，有时服务器授权的数据会被直观地存储在客户端，这迫使我们在检索数据之前和应用数据之前验证数据。
 
-## 1.  GameInstance
-----------------
+## 1. GameInstance
+
+---
 
 **GameInstance** 是一个用于运行游戏实例的高级管理器**对象**。在游戏创建时生成，并在游戏实例关闭之前不会销毁。换句话说，**GameInstance** 从一个关卡持续到另一个关卡，无论转移类型如何，这使其成为保存数据的好选择。作为独立游戏运行，将有一个。在 PIE 中运行将为每个 PIE 实例生成一个。
 
@@ -994,13 +987,14 @@ bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
 
 ### 用法
 
-*   在**硬**转移期间，在关卡之间持久化世界状态数据。
-*   在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
+- 在**硬**转移期间，在关卡之间持久化世界状态数据。
+- 在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
 
 **提示：** 考虑使用[下一个选项](https://wizardcell.com/unreal/persistent-data/#2-programming-subsystems)代替。
 
-## 2.  编程子系统
--------------------
+## 2. 编程子系统
+
+---
 
 虚幻引擎中的子系统是具有受管理生命周期的自动实例化的类。这些类提供了易于使用的扩展点，程序员可以在其中立即获得蓝图和 Python 的公开，同时避免修改或覆盖引擎类的复杂性。子系统不支持网络，因此你不应该直接在它们内部复制任何数据。有关它们及其有用的更多信息，可以在 [offical docs](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/Subsystems/) 或 [benui 的博文](https://benui.ca/unreal/subsystem-singleton/) 中找到。
 
@@ -1018,12 +1012,12 @@ bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
 
 ### 用法
 
-*   保持一个优化的**GameInstance**。
+- 保持一个优化的**GameInstance**。
 
 #### GameInstance 子系统
 
-*   在**硬**转移期间，在关卡之间持久化世界状态数据。
-*   在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
+- 在**硬**转移期间，在关卡之间持久化世界状态数据。
+- 在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
 
 ##### 用法示例
 
@@ -1031,8 +1025,8 @@ bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
 
 #### LocalPlayer 子系统
 
-*   在**硬**转移期间，在关卡之间持久化特定于玩家和本地玩家的数据（例如 UI、输入等）。
-*   在断开连接时存储特定于玩家和本地玩家的数据，并在重新连接时检索它。
+- 在**硬**转移期间，在关卡之间持久化特定于玩家和本地玩家的数据（例如 UI、输入等）。
+- 在断开连接时存储特定于玩家和本地玩家的数据，并在重新连接时检索它。
 
 ##### 用法示例
 
@@ -1040,8 +1034,9 @@ bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
 
 **注意：** 不要将 [**编程子系统**](https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/Subsystems/) 与 [**在线子系统**](https://docs.unrealengine.com/en-US/online-subsystem-in-unreal-engine/) 混淆，因为它们是不同的实体。
 
-## 3.  PlayerState
----------------
+## 3. PlayerState
+
+---
 
 为服务器上的每个玩家（或独立游戏）创建一个**PlayerState**。**PlayerStates** 与所有客户端相关并复制到所有客户端，并包含关于玩家的网络游戏相关信息，例如他的名字、分数、ping 等。
 
@@ -1055,8 +1050,8 @@ bool UEngine::Exec( UWorld*InWorld, const TCHAR* Cmd, FOutputDevice& Ar )
 
 ### 用法
 
-*   在**无缝**转移期间，在关卡之间持久化特定于玩家的数据。
-*   在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
+- 在**无缝**转移期间，在关卡之间持久化特定于玩家的数据。
+- 在断开连接时存储特定于玩家的数据，并在重新连接时检索它。
 
 ### 用法示例
 
@@ -1169,8 +1164,9 @@ void AMyPlayerState::Reset()
 
 **注意：** `APlayerState::CopyProperties()` 在**无缝**和**硬**转移时都被调用。转移时，转移必须是**无缝**的，才能调用它。在断开连接时，根据定义转移是**硬**的，我们之前已经看到它被调用（除非[我们没有这样做](https://wizardcell.com/unreal/persistent-data/#the-better-more-reliable-way-to-stash-data-on-disconnection)）。
 
-## 4.  PlayerController
---------------------
+## 4. PlayerController
+
+---
 
 **PlayerController** 是**Pawn**与控制它的玩家之间的接口。**PlayerController** 本质上代表了人类玩家的意志。
 
@@ -1184,8 +1180,8 @@ void AMyPlayerState::Reset()
 
 ### 用法
 
-*   在**无缝**转移期间，在关卡之间持久化特定于玩家的数据。
-*   在**无缝**转移期间，在关卡之间持久化相同的整个**PlayerController** 和**PlayerCameraManager** **Actor** 实例。
+- 在**无缝**转移期间，在关卡之间持久化特定于玩家的数据。
+- 在**无缝**转移期间，在关卡之间持久化相同的整个**PlayerController** 和**PlayerCameraManager** **Actor** 实例。
 
 ### 用法示例
 
@@ -1242,8 +1238,9 @@ void K2_OnSwapPlayerControllers(APlayerController* OldPC, APlayerController* New
 
 **注意：** 上面的函数必须在目标关卡的**GameMode**类中被覆盖。
 
-## 5.  GetSeamlessTravelActorList
-------------------------------
+## 5. GetSeamlessTravelActorList
+
+---
 
 这个函数有两个版本，分别在两个不同的类中：**GameMode** 和 **PlayerController**。让我们看一下前者的文档：
 
@@ -1272,16 +1269,16 @@ virtual void GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& Act
 
 ### 用法
 
-*   以很少或没有努力的方式真正地持久化**对象**。
-*   非常适合初始化顺序。
+- 以很少或没有努力的方式真正地持久化**对象**。
+- 非常适合初始化顺序。
 
 #### AGameModeBase:: GetSeamlessTravelActorList
 
-*   在**无缝**转移期间，持久化服务器端世界状态**对象**。
+- 在**无缝**转移期间，持久化服务器端世界状态**对象**。
 
 #### APlayerController:: GetSeamlessTravelActorList
 
-*   在**无缝**转移期间，持久化本地玩家（通常是客户端）相关的**对象**。
+- 在**无缝**转移期间，持久化本地玩家（通常是客户端）相关的**对象**。
 
 **注意：** 如我们[之前所见](https://wizardcell.com/unreal/persistent-data/#persistent-objects-on-server-to-destination-map)，**PlayerController** 函数版本可以在服务器端调用，以防监听服务器玩家。
 
@@ -1304,7 +1301,7 @@ struct FTeamInfo
 
     UPROPERTY()
     FText Name;
-    
+
     UPROPERTY()
     int32 Score;
 
@@ -1433,8 +1430,9 @@ void ACombatGameMode::InitGameState()
 
 请注意，我们在新的 **GameMode** 被 [实例化](https://docs.unrealengine.com/4.26/en-US/ProgrammingAndScripting/ProgrammingWithCPP/UnrealArchitecture/Actors/ActorLifecycle/) 之前就找到了 **Actor**，因此可以在调用 `BeginPlay()` 之前找到它，这非常适合初始化顺序，因此它就在那里，无论我们尝试找到它的时间有多早。
 
-## 6.  SaveGame
-------------
+## 6. SaveGame
+
+---
 
 这个类充当保存游戏**对象**的基本类，该对象可用于保存有关游戏状态的信息。
 
@@ -1448,19 +1446,20 @@ void ACombatGameMode::InitGameState()
 
 ### 用法
 
-*   保存应该在游戏退出时持续存在的特定于玩家或世界状态的数据。
-*   保存游戏用户设置（尽管通常它们保存在 [特殊的文件配置](https://docs.unrealengine.com/4.27/en-US/API/Runtime/Engine/GameFramework/UGameUserSettings/) 中）。
+- 保存应该在游戏退出时持续存在的特定于玩家或世界状态的数据。
+- 保存游戏用户设置（尽管通常它们保存在 [特殊的文件配置](https://docs.unrealengine.com/4.27/en-US/API/Runtime/Engine/GameFramework/UGameUserSettings/) 中）。
 
 ### 用法示例
 
 我偶然发现了大量的示例，但以下是我建议的示例：
 
-*   [保存和加载你的游戏（官方文档）](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/SaveGame/)
-*   [虚幻引擎 cpp 保存系统 (Tom Looman 教程)](https://www.tomlooman.com/unreal-engine-cpp-save-system/)
-*   [SPUD：Steve 的持久虚幻数据库（完整的保存系统插件）](https://github.com/sinbad/SPUD)
+- [保存和加载你的游戏（官方文档）](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/SaveGame/)
+- [虚幻引擎 cpp 保存系统 (Tom Looman 教程)](https://www.tomlooman.com/unreal-engine-cpp-save-system/)
+- [SPUD：Steve 的持久虚幻数据库（完整的保存系统插件）](https://github.com/sinbad/SPUD)
 
-## 7.  游戏选项字符串
--------------------
+## 7. 游戏选项字符串
+
+---
 
 虽然之前的方法围绕**对象**进行，但这个方法并非如此。
 
@@ -1533,47 +1532,47 @@ struct ENGINE_API FURL
 1.  **World URL** (`UWorld.URL`)：缓存的加载世界 URL。
 2.  **Demo URL** (`FReplayHelper.DemoURL`)：缓存的重放 URL。
 
-下表包含_所有_内置选项：
+下表包含*所有*内置选项：
 
-| 选项                           | 描述                                    | World URL 选项？ | Demo URL 选项？ | 注意                                                                                                                                                                                          |     |
-| ---------------------------- | ------------------------------------- | ------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| Game                         | 要使用的 GameMode 类的别名。                   | ✔️            | ✔️           | 覆盖默认值。别名在 项目设置->地图和模式->默认模式->高级->游戏模式类别名 中设置。                                                                                                                                               |     |
-| Load                         | 如果设置，则不会缓存加载的世界 URL。                  | ✔️            |              |                                                                                                                                                                                             |     |
-| Name                         | 要使用的玩家/机器人名称。                         | ✔️            |              | 长度限制为 20 个字符。                                                                                                                                                                               |     |
-| MaxPlayers                   | 服务器允许的最大玩家数量。                         | ✔️            |              |                                                                                                                                                                                             |     |
-| MaxSpectators                | 服务器允许的最大观察者数量。                        | ✔️            |              |                                                                                                                                                                                             |     |
-| SplitscreenCount             | 允许从一个连接进行分屏的玩家数量。                     | ✔️            |              |                                                                                                                                                                                             |     |
-| Listen                       | 指定服务器为监听服务器。                          | ✔️            |              |                                                                                                                                                                                             |     |
-| bIsLanMatch                  | 设置多人游戏是否在本地网络上。                       | ✔️            |              |                                                                                                                                                                                             |     |
-| bPassthrough                 | 设置此网络连接是否直接传递到 IpConnection。          | ✔️            |              | 使用直通套接字。                                                                                                                                                                                    |     |
-| bUseIPSockets                | 设置是否使用 IP 套接字。                        | ✔️            |              |                                                                                                                                                                                             |     |
-| LAN                          | 用于设置 lan 相关设置。                        | ✔️            |              | 检索 ConfiguredLanSpeed。                                                                                                                                                                      |     |
-| bIsFromInvite                | 指定加入的玩家被邀请。                           | ✔️            |              |                                                                                                                                                                                             |     |
-| SpectatorOnly                | 以观察者模式启动游戏。                           | ✔️            |              |                                                                                                                                                                                             |     |
-| SkipSpawnSpectatorController | 跳过生成演示观察者。                            |               | ✔️           |                                                                                                                                                                                             |     |
-| DemoRec                      | 要使用的演示录制名称。                           |               | ✔️           |                                                                                                                                                                                             |     |
-| DemoFriendlyName             | 重放描述，最好是人类可读的。                        |               | ✔️           |                                                                                                                                                                                             |     |
-| RecordMapChanges             | 设置演示网络驱动程序是否记录地图更改/转移。                |               | ✔️           |                                                                                                                                                                                             |     |
-| ReplayStreamerOverride       | 覆盖默认的 FReplayHelper.ReplayStreamer。   |               | ✔️           | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                               |     |
-| ReplayStreamerDemoPath       | 更改存储演示的基目录。                           |               | ✔️           | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                               |     |
-| SkipToLevelIndex             | 导致当前重放跳到具有指定索引的关卡。                    |               | ✔️           | 来自使用的关卡列表。                                                                                                                                                                                  |     |
-| AsyncLoadWorldOverride       | 覆盖默认的异步世界加载 CVarDemoAsyncLoadWorld 值。 |               | ✔️           | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                               |     |
-| LevelPrefixOverride          | 设置此网络驱动程序要使用的关卡 ID/PIE 实例 ID。         | ✔️            |              |                                                                                                                                                                                             |     |
-| AuthTicket                   | 用于验证的令牌。                              | ✔️            |              |                                                                                                                                                                                             |     |
-| EncryptionToken              | 令牌，用于使服务器开始启用连接加密的过程。                 | ✔️            |              | 更多信息请见此处。                                                                                                                                                                                   |     |
-| NoTimeouts                   | 完全忽略超时。应仅用于开发。                        | ✔️            |              |                                                                                                                                                                                             |     |
-| Failed                       | 发生了转移失败。                              | ✔️            |              |                                                                                                                                                                                             |     |
-| Closed                       | 与服务器的连接已关闭。                           | ✔️            |              |                                                                                                                                                                                             |     |
-| Restart                      | 重用我们上次转移的 URL。                        | ✔️            |              |                                                                                                                                                                                             |     |
-| Quiet                        |                                       | ✔️            |              |                                                                                                                                                                                             |     |
-| SeamlessTravel               | 将 ServerTravel 设置为无缝。                 | ✔️            |              | 覆盖默认值（即将推出）。                                                                                                                                                                                |     |
-| NoSeamlessTravel             | 将 ServerTravel 设置为非无缝。                | ✔️            |              | 覆盖默认值（即将推出）。                                                                                                                                                                                |     |
-| Mutator                      | 加载指定变异器的包。                            | ✔️            |              | 更多信息请见[此处](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Mutators/)和[此处](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Mutators/MutatorsInBlueprints/)。 |     |
-| BugLoc                       | 将玩家移动到指定位置。                           | ✔️            |              | 例如 BugLoc=(X=1798.8569,Y=475.9513,Z=-8.8500)                                                                                                                                                |     |
-| BugRot                       | 将玩家设置为指定的旋转。                          | ✔️            |              | 例如 BugRot=(Pitch=-1978,Yaw=-7197,Roll=0)                                                                                                                                                    |     |
-| CauseEvent                   | 在第一个 tick 后发出原因事件，为游戏提供生成玩家等的机会。      | ✔️            |              |                                                                                                                                                                                             |     |
-| InitialConnectTimeout        | 覆盖 NetDriver.InitialConnectTimeout。   | ✔️            |              |                                                                                                                                                                                             |     |
-| ConnectTimeout               | 覆盖 NetDriver.ConnectTimeout。          | ✔️            |              |                                                                                                                                                                                             |     |
+| 选项                         | 描述                                                       | World URL 选项？ | Demo URL 选项？ | 注意                                                                                                                                                                                                    |     |
+| ---------------------------- | ---------------------------------------------------------- | ---------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| Game                         | 要使用的 GameMode 类的别名。                               | ✔️               | ✔️              | 覆盖默认值。别名在 项目设置->地图和模式->默认模式->高级->游戏模式类别名 中设置。                                                                                                                        |     |
+| Load                         | 如果设置，则不会缓存加载的世界 URL。                       | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Name                         | 要使用的玩家/机器人名称。                                  | ✔️               |                 | 长度限制为 20 个字符。                                                                                                                                                                                  |     |
+| MaxPlayers                   | 服务器允许的最大玩家数量。                                 | ✔️               |                 |                                                                                                                                                                                                         |     |
+| MaxSpectators                | 服务器允许的最大观察者数量。                               | ✔️               |                 |                                                                                                                                                                                                         |     |
+| SplitscreenCount             | 允许从一个连接进行分屏的玩家数量。                         | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Listen                       | 指定服务器为监听服务器。                                   | ✔️               |                 |                                                                                                                                                                                                         |     |
+| bIsLanMatch                  | 设置多人游戏是否在本地网络上。                             | ✔️               |                 |                                                                                                                                                                                                         |     |
+| bPassthrough                 | 设置此网络连接是否直接传递到 IpConnection。                | ✔️               |                 | 使用直通套接字。                                                                                                                                                                                        |     |
+| bUseIPSockets                | 设置是否使用 IP 套接字。                                   | ✔️               |                 |                                                                                                                                                                                                         |     |
+| LAN                          | 用于设置 lan 相关设置。                                    | ✔️               |                 | 检索 ConfiguredLanSpeed。                                                                                                                                                                               |     |
+| bIsFromInvite                | 指定加入的玩家被邀请。                                     | ✔️               |                 |                                                                                                                                                                                                         |     |
+| SpectatorOnly                | 以观察者模式启动游戏。                                     | ✔️               |                 |                                                                                                                                                                                                         |     |
+| SkipSpawnSpectatorController | 跳过生成演示观察者。                                       |                  | ✔️              |                                                                                                                                                                                                         |     |
+| DemoRec                      | 要使用的演示录制名称。                                     |                  | ✔️              |                                                                                                                                                                                                         |     |
+| DemoFriendlyName             | 重放描述，最好是人类可读的。                               |                  | ✔️              |                                                                                                                                                                                                         |     |
+| RecordMapChanges             | 设置演示网络驱动程序是否记录地图更改/转移。                |                  | ✔️              |                                                                                                                                                                                                         |     |
+| ReplayStreamerOverride       | 覆盖默认的 FReplayHelper.ReplayStreamer。                  |                  | ✔️              | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                                       |     |
+| ReplayStreamerDemoPath       | 更改存储演示的基目录。                                     |                  | ✔️              | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                                       |     |
+| SkipToLevelIndex             | 导致当前重放跳到具有指定索引的关卡。                       |                  | ✔️              | 来自使用的关卡列表。                                                                                                                                                                                    |     |
+| AsyncLoadWorldOverride       | 覆盖默认的异步世界加载 CVarDemoAsyncLoadWorld 值。         |                  | ✔️              | 值：True/Yes/On 与 False/No/Off。                                                                                                                                                                       |     |
+| LevelPrefixOverride          | 设置此网络驱动程序要使用的关卡 ID/PIE 实例 ID。            | ✔️               |                 |                                                                                                                                                                                                         |     |
+| AuthTicket                   | 用于验证的令牌。                                           | ✔️               |                 |                                                                                                                                                                                                         |     |
+| EncryptionToken              | 令牌，用于使服务器开始启用连接加密的过程。                 | ✔️               |                 | 更多信息请见此处。                                                                                                                                                                                      |     |
+| NoTimeouts                   | 完全忽略超时。应仅用于开发。                               | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Failed                       | 发生了转移失败。                                           | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Closed                       | 与服务器的连接已关闭。                                     | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Restart                      | 重用我们上次转移的 URL。                                   | ✔️               |                 |                                                                                                                                                                                                         |     |
+| Quiet                        |                                                            | ✔️               |                 |                                                                                                                                                                                                         |     |
+| SeamlessTravel               | 将 ServerTravel 设置为无缝。                               | ✔️               |                 | 覆盖默认值（即将推出）。                                                                                                                                                                                |     |
+| NoSeamlessTravel             | 将 ServerTravel 设置为非无缝。                             | ✔️               |                 | 覆盖默认值（即将推出）。                                                                                                                                                                                |     |
+| Mutator                      | 加载指定变异器的包。                                       | ✔️               |                 | 更多信息请见[此处](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Mutators/)和[此处](https://docs.unrealengine.com/4.27/en-US/InteractiveExperiences/Mutators/MutatorsInBlueprints/)。 |     |
+| BugLoc                       | 将玩家移动到指定位置。                                     | ✔️               |                 | 例如 BugLoc=(X=1798.8569,Y=475.9513,Z=-8.8500)                                                                                                                                                          |     |
+| BugRot                       | 将玩家设置为指定的旋转。                                   | ✔️               |                 | 例如 BugRot=(Pitch=-1978,Yaw=-7197,Roll=0)                                                                                                                                                              |     |
+| CauseEvent                   | 在第一个 tick 后发出原因事件，为游戏提供生成玩家等的机会。 | ✔️               |                 |                                                                                                                                                                                                         |     |
+| InitialConnectTimeout        | 覆盖 NetDriver.InitialConnectTimeout。                     | ✔️               |                 |                                                                                                                                                                                                         |     |
+| ConnectTimeout               | 覆盖 NetDriver.ConnectTimeout。                            | ✔️               |                 |                                                                                                                                                                                                         |     |
 
 **注意：** 像控制台命令一样，选项不区分大小写。
 
@@ -1583,7 +1582,7 @@ struct ENGINE_API FURL
 
 在蓝图中，有两个主要的函数驱动转移：
 
-*   **OpenLevel**：
+- **OpenLevel**：
 
 ![OpenLevel](https://wizardcell.com//assets/blog/persistent-data/open-level.png)
 
@@ -1604,7 +1603,7 @@ void UGameplayStatics::OpenLevel(const UObject* WorldContextObject, FName LevelN
         Cmd += FString(TEXT("?")) + Options;
     }
     FURL TestURL(&WorldContext.LastURL, *Cmd, TravelType);
-        
+
     ...
 }
 ```
@@ -1613,7 +1612,7 @@ void UGameplayStatics::OpenLevel(const UObject* WorldContextObject, FName LevelN
 
 如前所述，`bAbsolute = true` 为默认值，它会重置我们曾经使用过的 `Options` 字符串，否则它会从之前的关卡带走，即，我们现在传递的 `Options` 字符串被追加到它后面（关于[这个谜题](https://wizardcell.com/unreal/persistent-data/#the-enigmas)更多信息见下文）。
 
-*   **ExecuteConsoleCommand**：
+- **ExecuteConsoleCommand**：
 
 ![ExecuteConsoleCommand](https://wizardcell.com//assets/blog/persistent-data/execute-console-command.png)
 
@@ -1627,12 +1626,12 @@ void UGameplayStatics::OpenLevel(const UObject* WorldContextObject, FName LevelN
 LocalPlayer.h
 
 ```cpp
-/** 
+/**
  * 检索此玩家的任何特定于游戏的登录选项
  * 如果此函数返回一个非空字符串，则返回的选项或选项将添加
  * 传递到关卡加载和连接代码。选项采用 URL 格式，
  * key=value，多个选项用 & 连接在一起
- * 
+ *
  * @return 此游戏的 URL 选项或选项，否则为空字符串
  */
 virtual FString GetGameLoginOptions() const { return TEXT(""); }
@@ -1678,7 +1677,7 @@ void AGameModeBase::InitGame(const FString& MapName, const FString& Options, FSt
 
 考虑到这是缓存 `AGameModeBase.OptionsString` 的唯一位置，我们得出结论：
 
-*   如果是**监听服务器**设置：`OptionsString` 属于主机玩家。
+- 如果是**监听服务器**设置：`OptionsString` 属于主机玩家。
 
 例如，假设一个玩家正在托管一个地图，即，作为监听服务器加载。他可能希望使用设置的参数调用以下函数：
 
@@ -1706,7 +1705,7 @@ virtual FString InitNewPlayer(APlayerController* NewPlayerController, const FUni
 
 **注意：** 仅在进行**硬**转移时才调用 `AGameModeBase::InitNewPlayer()` 和登录函数（`AGameModeBase::PreLogin()`/`AGameModeBase::Login()`）。对于尝试加入服务器的客户端连接，将调用 `AGameModeBase::PreLogin()`。对于每个被接受的客户端连接，包括监听服务器连接，如果存在这样的连接，将调用 `AGameModeBase::Login()`。
 
-*   如果是**专用服务器**设置：选项字符串属于服务器。对于客户端来说，它有所不同，具体取决于它们使用什么转移命令进行转移。例如，`ServerTravel` 使用与服务器相同的选项字符串转移所有客户端。如果你希望能够传递不同的选项字符串，则需要使用 `Travel` 或 `Open` 命令。
+- 如果是**专用服务器**设置：选项字符串属于服务器。对于客户端来说，它有所不同，具体取决于它们使用什么转移命令进行转移。例如，`ServerTravel` 使用与服务器相同的选项字符串转移所有客户端。如果你希望能够传递不同的选项字符串，则需要使用 `Travel` 或 `Open` 命令。
 
 **(2)** 正如我们之前说过几次，根据 [转移类型](https://wizardcell.com/unreal/persistent-data/#travel-types)，选项字符串可能会被重置。这究竟意味着什么？
 
@@ -1781,13 +1780,13 @@ void UEngine::SetClientTravel( UWorld *InWorld, const TCHAR* NextURL, ETravelTyp
 
 ### 用法
 
-*   在转移时（无论转移类型如何）持久化基本数据类型。
-*   在第一次加载时将数据传递给服务器（**硬**转移）。
-*   快速测试。
+- 在转移时（无论转移类型如何）持久化基本数据类型。
+- 在第一次加载时将数据传递给服务器（**硬**转移）。
+- 快速测试。
 
 ### 用法示例
 
-*   以下是通过命令行启动独立版本的示例：
+- 以下是通过命令行启动独立版本的示例：
 
 UnrealEngine.cpp
 
@@ -1798,7 +1797,10 @@ UnrealEditor.exe MyGame.uproject /Game/Maps/MyMap?listen -server
 MyGame.exe 127.0.0.1
 ```
 
-*   以下是玩家托管地图（通过按 1）并且另一个玩家加入他（通过按 2）的示例：
+- 以下是玩家托管地图（通过按 1）并且另一个玩家加入他（通过按 2）的示例：
 
 ![HostAndJoin](https://wizardcell.com//assets/blog/persistent-data/host-and-join.png)
+
+```
+
 ```
